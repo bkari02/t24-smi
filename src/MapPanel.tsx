@@ -40,7 +40,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     updateStartMarkerStyles(phase);
     map.current = instance;
     const courses: { phase: Phase; file: string; color: string }[] = [
-      { phase: 'Bike', file: 'bike.gpx', color: '#4cc9a4' },
+      { phase: 'Bike', file: 'bike.gpx', color: '#f6c85f' },
       { phase: 'Run', file: 'run.gpx', color: '#91a7ff' },
     ];
     courses.forEach(({ phase: coursePhase, file, color }) => {
@@ -68,7 +68,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
             .bindTooltip(`${coursePhase} start / handover`)
             .addTo(instance);
           updateStartMarkerStyles(phase);
-          updateRouteVisibility(phase);
+          updateRouteStyles(phase);
         })
         .catch((error: unknown) => {
           console.error(`Could not load ${file}`, error);
@@ -79,11 +79,20 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     };
   }, []);
 
-  function updateRouteVisibility(currentPhase: Phase) {
+  function updateRouteStyles(currentPhase: Phase) {
+    const colors: Record<Phase, string> = {
+      Swim: '#f26b4f',
+      Bike: '#f6c85f',
+      Run: '#91a7ff',
+    };
     Object.entries(routeLayers.current).forEach(([routePhase, layer]) => {
       if (!layer) return;
-      if (routePhase === currentPhase) layer.addTo(map.current!);
-      else layer.remove();
+      const isCurrent = routePhase === currentPhase;
+      layer.setStyle({
+        color: isCurrent ? colors[routePhase as Phase] : '#87958f',
+        opacity: isCurrent ? 0.9 : 0.35,
+        weight: isCurrent ? 5 : 3,
+      });
     });
   }
 
@@ -107,7 +116,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
   }
 
   useEffect(() => {
-    updateRouteVisibility(phase);
+    updateRouteStyles(phase);
     updateStartMarkerStyles(phase);
   }, [phase]);
 
