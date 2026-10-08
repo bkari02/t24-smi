@@ -198,7 +198,7 @@ function App() {
           <button className="primary-button tracker-button" onClick={toggleTracking}>{tracking ? 'Stop phone tracking' : 'Start phone tracking'}</button>
           {syncMessage && <p className="sync-message">{syncMessage}</p>}
           {activeLocation && <p className="muted">Active participant: {active.name} · last location {locationAge}s ago · accuracy ±{Math.round(activeLocation.accuracy ?? 0)}m</p>}
-          <MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} />
+          <MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} />
         </section>
       ) : (
         <>
@@ -227,7 +227,7 @@ function App() {
               })}
               <div className="next-estimate"><span>Estimated next handover</span><strong>{activeRound ? formatClock(new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000).toISOString()) : '--:--'}</strong></div>
             </div>
-            <div className="panel map-panel"><div className="section-heading"><div><p className="eyebrow">LIVE MAP</p><h2>{Object.keys(state.locations).length ? 'All participants' : 'Course preview'}</h2></div>{activeLocation && <span className={`status ${locationAge !== undefined && locationAge < 60 ? 'good' : ''}`}>{locationAge}s ago</span>}</div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} /></div>
+            <div className="panel map-panel"><div className="section-heading"><div><p className="eyebrow">LIVE MAP</p><h2>{Object.keys(state.locations).length ? 'All participants' : 'Course preview'}</h2></div>{activeLocation && <span className={`status ${locationAge !== undefined && locationAge < 60 ? 'good' : ''}`}>{locationAge}s ago</span>}</div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} /></div>
           </section>
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>Latest rounds</h2></div><span className="muted">{phaseConfig.distance} per round</span></div>
             {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDuration(duration)}</b></div>; })}</div>}
