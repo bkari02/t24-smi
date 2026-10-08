@@ -44,6 +44,14 @@ function formatDuration(seconds: number) {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 }
 
+function formatDurationWithSeconds(seconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainder = totalSeconds % 60;
+  return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(remainder).padStart(2, '0')}s`;
+}
+
 function formatClock(iso?: string) {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
 }
@@ -223,6 +231,9 @@ function App() {
   const estimatedFinish = activeRound && typicalDuration
     ? new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000)
     : undefined;
+  const estimatedFinishIn = estimatedFinish
+    ? Math.max(0, (estimatedFinish.getTime() - now) / 1000)
+    : undefined;
   const estimateSource = recentDurations.length ? 'recent phase laps' : 'CSV estimate';
 
   function focusParticipant(id: string) {
@@ -259,9 +270,9 @@ function App() {
             </div>
             <div className="active-card" style={{ borderColor: active.color }}>
               <p className="eyebrow">ACTIVE NOW</p><h2>{active.name}</h2>
-              <p className="active-time">{activeRound ? `${formatDuration(elapsed)} elapsed` : 'Waiting at transition'}</p>
+              <p className="active-time">{activeRound ? `${formatDurationWithSeconds(elapsed)} elapsed` : 'Waiting at transition'}</p>
               <div className="round-pill">{activeRound ? `Round ${activeRound.number}` : `Next: round ${phaseRounds.length + 1}`}</div>
-              {estimatedFinish && typicalDuration !== undefined && <p className="estimate">Estimated finish {formatClock(estimatedFinish.toISOString())}<small>Based on {estimateSource} · {formatDuration(typicalDuration)}</small></p>}
+              {estimatedFinish && typicalDuration !== undefined && estimatedFinishIn !== undefined && <p className="estimate">Estimated finish {formatClock(estimatedFinish.toISOString())}<span className="estimate-countdown">in {formatDurationWithSeconds(estimatedFinishIn)}</span><small>Based on {estimateSource} · {formatDuration(typicalDuration)}</small></p>}
             </div>
           </section>
           <section className="control-panel">

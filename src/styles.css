@@ -50,6 +50,7 @@ select { min-width: 120px; border: 1px solid #3e6352; border-radius: 8px; backgr
 .next-estimate { display: flex; justify-content: space-between; margin-top: 20px; color: #80a395; font-size: 13px; }
 .next-estimate strong { color: #f6c85f; font-size: 17px; }
 .estimate { margin: 18px 0 0; color: #f6c85f; font-weight: 800; }
+.estimate-countdown { margin-left: 8px; color: #e8f0e9; font-weight: 600; }
 .estimate small { display: block; margin-top: 4px; color: #8ca99d; font-size: 11px; font-weight: 500; }
 .map-actions { display: flex; align-items: center; gap: 10px; }
 .refresh-button { border: 1px solid #3e6352; border-radius: 999px; background: #10271f; color: #c5ddcf; padding: 7px 11px; font-size: 12px; font-weight: 700; }
