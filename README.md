@@ -58,7 +58,7 @@ Do not commit `.env.local`, Supabase keys, or event tokens. The `.gitignore` alr
 
 ```sql
 insert into public.event_access (event_id, access_token)
-values ('t24-2026', 'PASTE_A_LONG_RANDOM_TOKEN_HERE');
+values ('your-event-id', 'PASTE_A_LONG_RANDOM_TOKEN_HERE');
 ```
 
 6. In **Project Settings → API**, copy:
@@ -84,13 +84,15 @@ The migration enables Row Level Security. Only requests carrying the matching `x
    ```text
    VITE_SUPABASE_URL=https://your-project.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-key
-   VITE_T24_EVENT_ID=t24-2026
+   VITE_T24_EVENT_ID=your-event-id
    VITE_T24_EVENT_TOKEN=the-same-token-used-in-event_access
    ```
 
 5. Trigger a new deploy.
 
 The `VITE_` values are bundled into the browser application. The anon key is designed to be public, but the event token should still be treated as private and rotated after the event. Never put a Supabase `service_role` key in Netlify frontend variables, OwnTracks, or source code.
+
+The repository's [`netlify.toml`](./netlify.toml) tells Netlify's secret scanner to ignore the event ID and frontend event token because Vite must bundle them for this prototype. This is a deployment workaround, not strong security: anyone who can load the site can inspect those values. For a stronger setup, remove `VITE_T24_EVENT_TOKEN` from the frontend and use the protected OwnTracks/Supabase Edge Function design described below.
 
 ### 4. Test the deployment
 
@@ -120,7 +122,7 @@ The function should insert fields in this shape:
 
 ```json
 {
-  "event_id": "t24-2026",
+  "event_id": "your-event-id",
   "participant_id": "p1",
   "latitude": 43.1195,
   "longitude": 6.362,
@@ -174,7 +176,7 @@ For local development, copy [`.env.example`](./.env.example) to `.env.local`:
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_T24_EVENT_ID=t24-2026
+VITE_T24_EVENT_ID=your-event-id
 VITE_T24_EVENT_TOKEN=replace-with-a-long-random-event-token
 ```
 

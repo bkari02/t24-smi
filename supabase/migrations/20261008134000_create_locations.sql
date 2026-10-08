@@ -57,4 +57,4 @@ alter publication supabase_realtime add table public.locations;
 -- Replace the token before applying this statement. Do not commit the real
 -- token to the repository.
 -- insert into public.event_access (event_id, access_token)
--- values ('t24-2026', 'replace-with-a-long-random-event-token');
+-- values ('your-event-id', 'replace-with-a-long-random-event-token');

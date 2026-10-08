@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "26"
+  # These VITE_ variables are intentionally bundled into the browser app.
+  # Replace the frontend token approach with an Edge Function before using
+  # this dashboard for sensitive or public-facing events.
+  SECRETS_SCAN_OMIT_KEYS = "VITE_T24_EVENT_ID,VITE_T24_EVENT_TOKEN"
