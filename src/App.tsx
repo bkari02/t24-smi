@@ -154,7 +154,9 @@ function App() {
   const activeRound = [...state.rounds].reverse().find((round) => round.participantId === active.id && !round.finishedAt);
   const completedRounds = state.rounds.filter((round) => round.finishedAt);
   const phaseConfig = phases.find((phase) => phase.name === state.phase)!;
-  const phaseRounds = completedRounds.filter((round) => round.phase === state.phase);
+  const phaseRounds = completedRounds.filter(
+    (round) => round.phase === state.phase && round.participantId === active.id,
+  );
   const recentDurations = phaseRounds.slice(-3).map((round) =>
     (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000);
   const csvDuration = paceEstimates[active.id]?.[state.phase];
