@@ -16,6 +16,7 @@ export type Round = {
 };
 
 export type Location = {
+  participantId: string;
   latitude: number;
   longitude: number;
   accuracy?: number;
@@ -29,5 +30,5 @@ export type EventState = {
   activeParticipantId: string;
   nextParticipantId: string;
   rounds: Round[];
-  location?: Location;
+  locations: Record<string, Location>;
 };

@@ -16,6 +16,7 @@ export const supabase = url && anonKey
   : null;
 
 type LocationRow = {
+  participant_id: string;
   latitude: number;
   longitude: number;
   accuracy: number | null;
@@ -24,6 +25,7 @@ type LocationRow = {
 
 export function fromLocationRow(row: LocationRow): Location {
   return {
+    participantId: row.participant_id,
     latitude: row.latitude,
     longitude: row.longitude,
     accuracy: row.accuracy ?? undefined,
@@ -45,15 +47,20 @@ export async function saveLocation(location: Location, participantId: string) {
   if (error) throw error;
 }
 
-export async function loadLatestLocation(): Promise<Location | undefined> {
-  if (!supabase) return undefined;
+export async function loadLatestLocations(): Promise<Location[]> {
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from('locations')
-    .select('latitude, longitude, accuracy, recorded_at')
+    .select('participant_id, latitude, longitude, accuracy, recorded_at')
     .eq('event_id', eventId)
     .order('recorded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(100);
   if (error) throw error;
-  return data ? fromLocationRow(data) : undefined;
+  const latestByParticipant = new Map<string, Location>();
+  (data ?? []).forEach((row) => {
+    if (!latestByParticipant.has(row.participant_id)) {
+      latestByParticipant.set(row.participant_id, fromLocationRow(row));
+    }
+  });
+  return [...latestByParticipant.values()];
 }

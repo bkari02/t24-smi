@@ -107,11 +107,11 @@ The browser tracker requires the deployed HTTPS URL and an active page. It is a 
 
 ## OwnTracks configuration
 
-OwnTracks is preferable for race-day tracking because it can send background location updates while the iPhone is locked. Use one dedicated iPhone for the active participant and carry a power bank.
+OwnTracks is preferable for race-day tracking because it can send background location updates while the iPhone is locked. Install it on one iPhone per participant so all five locations can be displayed. The active participant is rendered with a larger marker and white outline; the other four use their team colors.
 
 ### Important current limitation
 
-This repository currently includes the Supabase table and frontend receiver, but not an OwnTracks-specific Supabase Edge Function. Do **not** point OwnTracks directly at Supabase REST with a service-role key. Before the event, add or deploy a small HTTPS Edge Function that:
+The repository includes the OwnTracks Supabase Edge Function at [`supabase/functions/owntracks/index.ts`](./supabase/functions/owntracks/index.ts). Do **not** point OwnTracks directly at Supabase REST with a service-role key. The function:
 
 1. Accepts an OwnTracks HTTP location payload.
 2. Authenticates a dedicated device token.
@@ -132,7 +132,47 @@ The function should insert fields in this shape:
 }
 ```
 
-Use a separate device token for this function. Do not reuse the dashboard event token unless the function is explicitly designed for that purpose.
+Use a separate device token for each phone. Do not reuse the dashboard event token.
+
+### Deploy the OwnTracks function
+
+Install the Supabase CLI, log in, and link the local project:
+
+```bash
+npm install -g supabase
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase functions deploy owntracks --no-verify-jwt
+```
+
+`--no-verify-jwt` is required because OwnTracks uses Basic authentication rather than a Supabase user JWT. The function performs its own device-token authentication.
+
+Set these function secrets. Replace every placeholder before running:
+
+```bash
+supabase secrets set \
+  SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY" \
+  T24_EVENT_ID="YOUR_EVENT_ID" \
+  'OWNTRACKS_DEVICES={"T1":{"participantId":"p1","token":"PHONE_1_TOKEN"},"T2":{"participantId":"p2","token":"PHONE_2_TOKEN"},"T3":{"participantId":"p3","token":"PHONE_3_TOKEN"},"T4":{"participantId":"p4","token":"PHONE_4_TOKEN"},"T5":{"participantId":"p5","token":"PHONE_5_TOKEN"}}'
+```
+
+Find `YOUR_PROJECT_REF` in the Supabase project URL (`https://YOUR_PROJECT_REF.supabase.co`). Find `YOUR_SERVICE_ROLE_KEY` under **Project Settings → API → Secret keys** or the legacy `service_role` key. It is a server secret: never put it in Netlify, OwnTracks, GitHub, or the browser.
+
+The deployed endpoint is:
+
+```text
+https://YOUR_PROJECT_REF.supabase.co/functions/v1/owntracks
+```
+
+To update a device mapping, run `supabase secrets set` again and redeploy the function. The participant IDs must match the dashboard defaults:
+
+| Participant ID | Name | OwnTracks device ID |
+|---|---|---|
+| `p1` | Kieeesch | `T1` |
+| `p2` | Lilli | `T2` |
+| `p3` | Jule | `T3` |
+| `p4` | Matze | `T4` |
+| `p5` | Benni | `T5` |
 
 ### Configure OwnTracks on iPhone
 
@@ -148,13 +188,16 @@ The labels can vary slightly by OwnTracks version:
    https://<supabase-project-ref>.supabase.co/functions/v1/owntracks
    ```
 
-6. Configure the function's authentication header/token as documented by the function implementation.
-7. Set the tracker mode to **Move** during the race. Use a less frequent mode while resting.
-8. Set a recognizable device or tracker ID, such as `T24`.
+6. Set the OwnTracks device ID (`tid`) to the matching ID from the table, such as `T1`.
+7. Configure HTTP Basic Authentication:
+   - username: the device ID, for example `T1`
+   - password: that device's token from `OWNTRACKS_DEVICES`
+8. Set the tracker mode to **Move** during the race. Use a less frequent mode while resting.
 9. Send a test location and confirm:
    - the Edge Function returns HTTP 200;
    - a new row appears in `public.locations`;
-   - the dashboard map updates within a few seconds.
+   - the dashboard map updates within a few seconds;
+   - the correct participant marker moves.
 
 Keep the OwnTracks function endpoint private to the team. If the phone is lost, revoke its device token immediately.
 

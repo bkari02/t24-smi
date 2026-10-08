@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import MapPanel from './MapPanel';
 import { EventState, Location, Phase, Round } from './types';
-import { eventId, loadLatestLocation, saveLocation, supabase } from './supabase';
+import { eventId, loadLatestLocations, saveLocation, supabase } from './supabase';
 
 const STORAGE_KEY = 't24-dashboard-v1';
 const phases: { name: Phase; duration: number; distance: string }[] = [
@@ -16,16 +16,24 @@ const initialState: EventState = {
   phase: 'Swim',
   activeParticipantId: 'p1',
   nextParticipantId: 'p2',
-  members: ['Anna', 'Marko', 'Petra', 'Jonas', 'Sofia'].map((name, index) => ({
+  members: ['Kieeesch', 'Lilli', 'Jule', 'Matze', 'Benni'].map((name, index) => ({
     id: `p${index + 1}`, name, color: colors[index],
   })),
   rounds: [],
+  locations: {},
 };
 
 function loadState(): EventState {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) as EventState : initialState;
+    if (!saved) return initialState;
+    const parsed = JSON.parse(saved) as Partial<EventState>;
+    return {
+      ...initialState,
+      ...parsed,
+      members: initialState.members,
+      locations: parsed.locations ?? {},
+    };
   } catch {
     return initialState;
   }
@@ -61,9 +69,9 @@ function App() {
     const client = supabase;
     if (!client) return;
     let cancelled = false;
-    loadLatestLocation()
-      .then((location) => {
-        if (!cancelled && location) update({ location });
+    loadLatestLocations()
+      .then((locations) => {
+        if (!cancelled) update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) });
       })
       .catch((error: Error) => {
         if (!cancelled) setSyncMessage(`Location sync unavailable: ${error.message}`);
@@ -74,13 +82,13 @@ function App() {
         event: 'INSERT', schema: 'public', table: 'locations',
         filter: `event_id=eq.${eventId}`,
       }, (payload) => {
-        const row = payload.new as { latitude: number; longitude: number; accuracy: number | null; recorded_at: string };
-        update({
-          location: {
-            latitude: row.latitude, longitude: row.longitude,
-            accuracy: row.accuracy ?? undefined, recordedAt: row.recorded_at,
-          },
-        });
+        const row = payload.new as { participant_id: string; latitude: number; longitude: number; accuracy: number | null; recorded_at: string };
+        const location = {
+          participantId: row.participant_id,
+          latitude: row.latitude, longitude: row.longitude,
+          accuracy: row.accuracy ?? undefined, recordedAt: row.recorded_at,
+        };
+        update({ locations: { ...state.locations, [location.participantId]: location } });
       })
       .subscribe();
     return () => {
@@ -154,10 +162,11 @@ function App() {
     const id = navigator.geolocation.watchPosition(
       (position) => {
         const location: Location = {
+          participantId: active.id,
           latitude: position.coords.latitude, longitude: position.coords.longitude,
           accuracy: position.coords.accuracy, recordedAt: new Date().toISOString(),
         };
-        update({ location });
+        update({ locations: { ...state.locations, [location.participantId]: location } });
         void saveLocation(location, active.id).catch((error: Error) => {
           setSyncMessage(`Location upload failed: ${error.message}`);
         });
@@ -168,7 +177,8 @@ function App() {
     setWatchId(id);
   }
 
-  const locationAge = state.location ? Math.round((now - new Date(state.location.recordedAt).getTime()) / 1000) : undefined;
+  const activeLocation = state.locations[active.id];
+  const locationAge = activeLocation ? Math.round((now - new Date(activeLocation.recordedAt).getTime()) / 1000) : undefined;
   const startLabel = activeRound ? `Round ${activeRound.number} in progress` : 'Start next round';
 
   return (
@@ -187,8 +197,8 @@ function App() {
           <p className="muted">Keep this page open on the active participant’s iPhone as a fallback. With Supabase configured, updates are shared with every dashboard. For reliable background tracking, use OwnTracks and send it to a protected ingestion function.</p>
           <button className="primary-button tracker-button" onClick={toggleTracking}>{tracking ? 'Stop phone tracking' : 'Start phone tracking'}</button>
           {syncMessage && <p className="sync-message">{syncMessage}</p>}
-          {state.location && <p className="muted">Last location: {locationAge}s ago · accuracy ±{Math.round(state.location.accuracy ?? 0)}m</p>}
-          <MapPanel location={state.location} />
+          {activeLocation && <p className="muted">Active participant: {active.name} · last location {locationAge}s ago · accuracy ±{Math.round(activeLocation.accuracy ?? 0)}m</p>}
+          <MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} />
         </section>
       ) : (
         <>
@@ -217,7 +227,7 @@ function App() {
               })}
               <div className="next-estimate"><span>Estimated next handover</span><strong>{activeRound ? formatClock(new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000).toISOString()) : '--:--'}</strong></div>
             </div>
-            <div className="panel map-panel"><div className="section-heading"><div><p className="eyebrow">LIVE MAP</p><h2>{state.location ? 'Active participant' : 'Course preview'}</h2></div>{state.location && <span className={`status ${locationAge !== undefined && locationAge < 60 ? 'good' : ''}`}>{locationAge}s ago</span>}</div><MapPanel location={state.location} /></div>
+            <div className="panel map-panel"><div className="section-heading"><div><p className="eyebrow">LIVE MAP</p><h2>{Object.keys(state.locations).length ? 'All participants' : 'Course preview'}</h2></div>{activeLocation && <span className={`status ${locationAge !== undefined && locationAge < 60 ? 'good' : ''}`}>{locationAge}s ago</span>}</div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} /></div>
           </section>
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>Latest rounds</h2></div><span className="muted">{phaseConfig.distance} per round</span></div>
             {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDuration(duration)}</b></div>; })}</div>}

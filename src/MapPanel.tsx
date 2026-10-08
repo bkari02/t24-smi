@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { Location } from './types';
+import { Location, TeamMember } from './types';
 
 const swimRoute: L.LatLngExpression[] = [
   [43.12142, 6.36186], [43.120915, 6.3623], [43.12041, 6.36274],
@@ -10,12 +10,12 @@ const swimRoute: L.LatLngExpression[] = [
   [43.12089, 6.361785], [43.12139, 6.36179],
 ];
 
-type Props = { location?: Location };
+type Props = { locations: Record<string, Location>; members: TeamMember[]; activeParticipantId: string };
 
-export default function MapPanel({ location }: Props) {
+export default function MapPanel({ locations, members, activeParticipantId }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map>();
-  const marker = useRef<L.CircleMarker>();
+  const markers = useRef<Record<string, L.CircleMarker>>({});
 
   useEffect(() => {
     if (!element.current || map.current) return;
@@ -35,14 +35,31 @@ export default function MapPanel({ location }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!map.current || !location) return;
-    const point: L.LatLngExpression = [location.latitude, location.longitude];
-    marker.current?.remove();
-    marker.current = L.circleMarker(point, {
-      radius: 9, color: '#fff', weight: 3, fillColor: '#4cc9a4', fillOpacity: 1,
-    }).bindTooltip('Active participant').addTo(map.current);
-    map.current.setView(point, Math.max(map.current.getZoom(), 15));
-  }, [location]);
+    const instance = map.current;
+    if (!instance) return;
+    Object.values(markers.current).forEach((marker) => marker.remove());
+    markers.current = {};
+    Object.entries(locations).forEach(([participantId, location]) => {
+      const member = members.find((item) => item.id === participantId);
+      if (!member) return;
+      const isActive = participantId === activeParticipantId;
+      const point: L.LatLngExpression = [location.latitude, location.longitude];
+      markers.current[participantId] = L.circleMarker(point, {
+        radius: isActive ? 12 : 7,
+        color: isActive ? '#fff' : member.color,
+        weight: isActive ? 4 : 2,
+        fillColor: member.color,
+        fillOpacity: isActive ? 1 : 0.8,
+      }).bindTooltip(`${member.name}${isActive ? ' · active' : ''}`).addTo(instance);
+    });
+    const activeLocation = locations[activeParticipantId];
+    if (activeLocation) {
+      instance.setView(
+        [activeLocation.latitude, activeLocation.longitude],
+        Math.max(instance.getZoom(), 15),
+      );
+    }
+  }, [activeParticipantId, locations, members]);
 
   return <div className="map-shell"><div className="map" ref={element} /></div>;
 }
