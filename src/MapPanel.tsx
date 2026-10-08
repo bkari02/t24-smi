@@ -40,7 +40,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     updateStartMarkerStyles(phase);
     map.current = instance;
     const courses: { phase: Phase; file: string; color: string }[] = [
-      { phase: 'Bike', file: 'bike.gpx', color: '#f6c85f' },
+      { phase: 'Bike', file: 'bike.gpx', color: '#f26b4f' },
       { phase: 'Run', file: 'run.gpx', color: '#91a7ff' },
     ];
     courses.forEach(({ phase: coursePhase, file, color }) => {
@@ -81,8 +81,8 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
 
   function updateRouteStyles(currentPhase: Phase) {
     const colors: Record<Phase, string> = {
-      Swim: '#f26b4f',
-      Bike: '#f6c85f',
+      Swim: '#f6c85f',
+      Bike: '#f26b4f',
       Run: '#91a7ff',
     };
     Object.entries(routeLayers.current).forEach(([routePhase, layer]) => {
@@ -98,8 +98,8 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
 
   function updateStartMarkerStyles(currentPhase: Phase) {
     const colors: Record<Phase, string> = {
-      Swim: '#f26b4f',
-      Bike: '#4cc9a4',
+      Swim: '#f6c85f',
+      Bike: '#f26b4f',
       Run: '#91a7ff',
     };
     Object.entries(startMarkers.current).forEach(([markerPhase, marker]) => {
