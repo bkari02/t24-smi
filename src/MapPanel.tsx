@@ -22,6 +22,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
   const map = useRef<L.Map>();
   const markers = useRef<Record<string, L.CircleMarker>>({});
   const routeLayers = useRef<Partial<Record<Phase, L.Polyline>>>({});
+  const startMarkers = useRef<Partial<Record<Phase, L.CircleMarker>>>({});
 
   useEffect(() => {
     if (!element.current || map.current) return;
@@ -33,9 +34,10 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     routeLayers.current.Swim = L.polyline(swimRoute, {
       color: '#f26b4f', weight: 5, opacity: 0.9,
     }).addTo(instance);
-    L.circleMarker(swimRoute[0], { radius: 7, color: '#10251f', fillColor: '#f6c85f', fillOpacity: 1 })
+    startMarkers.current.Swim = L.circleMarker(swimRoute[0])
       .bindTooltip('Swim start / handover')
       .addTo(instance);
+    updateStartMarkerStyles(phase);
     map.current = instance;
     const courses: { phase: Phase; file: string; color: string }[] = [
       { phase: 'Bike', file: 'bike.gpx', color: '#4cc9a4' },
@@ -62,6 +64,10 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
           routeLayers.current[coursePhase] = L.polyline(points, {
             color, weight: 4, opacity: 0.85,
           }).addTo(instance);
+          startMarkers.current[coursePhase] = L.circleMarker(points[0])
+            .bindTooltip(`${coursePhase} start / handover`)
+            .addTo(instance);
+          updateStartMarkerStyles(phase);
           updateRouteVisibility(phase);
         })
         .catch((error: unknown) => {
@@ -81,8 +87,28 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     });
   }
 
+  function updateStartMarkerStyles(currentPhase: Phase) {
+    const colors: Record<Phase, string> = {
+      Swim: '#f26b4f',
+      Bike: '#4cc9a4',
+      Run: '#91a7ff',
+    };
+    Object.entries(startMarkers.current).forEach(([markerPhase, marker]) => {
+      if (!marker) return;
+      const isCurrent = markerPhase === currentPhase;
+      marker.setStyle({
+        radius: isCurrent ? 8 : 6,
+        color: isCurrent ? '#10251f' : '#6d7b76',
+        weight: isCurrent ? 2 : 1,
+        fillColor: isCurrent ? colors[markerPhase as Phase] : '#a5b0ab',
+        fillOpacity: isCurrent ? 1 : 0.55,
+      });
+    });
+  }
+
   useEffect(() => {
     updateRouteVisibility(phase);
+    updateStartMarkerStyles(phase);
   }, [phase]);
 
   useEffect(() => {
