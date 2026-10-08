@@ -48,9 +48,13 @@ alter table public.team_members enable row level security;
 alter table public.rounds enable row level security;
 alter table public.event_actions enable row level security;
 
+drop policy if exists "event token can read events" on public.events;
 create policy "event token can read events" on public.events for select to anon, authenticated using (public.t24_has_event_token(id));
+drop policy if exists "event token can read members" on public.team_members;
 create policy "event token can read members" on public.team_members for select to anon, authenticated using (public.t24_has_event_token(event_id));
+drop policy if exists "event token can read rounds" on public.rounds;
 create policy "event token can read rounds" on public.rounds for select to anon, authenticated using (public.t24_has_event_token(event_id));
+drop policy if exists "event token can read actions" on public.event_actions;
 create policy "event token can read actions" on public.event_actions for select to anon, authenticated using (public.t24_has_event_token(event_id));
 
 create or replace function public.t24_record_action(p_event_id text, p_action text, p_payload jsonb default '{}'::jsonb)
@@ -135,9 +139,19 @@ begin
   perform public.t24_record_action(p_event_id, 'reset_event');
 end $$;
 
-alter publication supabase_realtime add table public.events;
-alter publication supabase_realtime add table public.team_members;
-alter publication supabase_realtime add table public.rounds;
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'events') then
+    alter publication supabase_realtime add table public.events;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'team_members') then
+    alter publication supabase_realtime add table public.team_members;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'rounds') then
+    alter publication supabase_realtime add table public.rounds;
+  end if;
+end
+$$;
 
 -- Replace placeholders and run once after applying this migration:
 -- insert into public.events(id,name,event_started_at,current_phase,active_participant_id,next_participant_id)

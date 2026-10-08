@@ -42,17 +42,31 @@ $$;
 -- The event token is sent by the frontend as x-t24-event-token. Keep it
 -- private and rotate it before race day. An Edge Function should be used for
 -- OwnTracks ingestion so the token is never placed in that app's config.
+drop policy if exists "event token can read locations" on public.locations;
 create policy "event token can read locations"
   on public.locations for select
   to anon, authenticated
   using (public.t24_has_event_token(event_id));
 
+drop policy if exists "event token can insert locations" on public.locations;
 create policy "event token can insert locations"
   on public.locations for insert
   to anon, authenticated
   with check (public.t24_has_event_token(event_id));
 
-alter publication supabase_realtime add table public.locations;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'locations'
+  ) then
+    alter publication supabase_realtime add table public.locations;
+  end if;
+end
+$$;
 
 -- Replace the token before applying this statement. Do not commit the real
 -- token to the repository.
