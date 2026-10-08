@@ -10,11 +10,11 @@ The dashboard tracks the active participant, next handover, round times, phase c
 - One-tap round start and finish
 - Next-participant selection and handover
 - Rolling handover estimate from recent rounds
-- Local round history
+- Shared round history through Supabase
 - Swim course preview from `public/courses/swim.gpx`
 - Leaflet/OpenStreetMap map
 - Supabase location storage and Realtime updates when configured
-- Browser geolocation fallback
+- OwnTracks locations for all participants
 - Manual and automatic location refresh every 30 seconds
 - Clickable participant rows for map focus
 - Editable per-participant pace estimates in [`public/data/pace-estimates.csv`](./public/data/pace-estimates.csv)
@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL shown by Vite. Without Supabase environment variables, the app still runs, but data is stored only in that browser's `localStorage`.
+Open the local URL shown by Vite. Supabase configuration is required for shared race state; the app does not create local rounds when the backend is unavailable.
 
 ## Free hosting: GitHub + Netlify
 
@@ -56,15 +56,30 @@ Do not commit `.env.local`, Supabase keys, or event tokens. The `.gitignore` alr
 1. Create a free project at <https://supabase.com/>.
 2. Open **SQL Editor**.
 3. Paste and run [`supabase/migrations/20261008134000_create_locations.sql`](./supabase/migrations/20261008134000_create_locations.sql).
-4. Generate a long random event token. Keep it private.
-5. Insert the event access row:
+4. Paste and run [`supabase/migrations/20261008233000_create_shared_event_state.sql`](./supabase/migrations/20261008233000_create_shared_event_state.sql).
+5. Generate a long random event token. Keep it private.
+6. Insert the event access row:
 
 ```sql
 insert into public.event_access (event_id, access_token)
 values ('your-event-id', 'PASTE_A_LONG_RANDOM_TOKEN_HERE');
 ```
 
-6. In **Project Settings → API**, copy:
+7. Insert the shared event and members, replacing `YOUR_EVENT_ID`:
+
+```sql
+insert into public.events(id, name, event_started_at, current_phase, active_participant_id, next_participant_id)
+values ('YOUR_EVENT_ID', 'T24 Team', now(), 'Swim', 'p1', 'p2');
+
+insert into public.team_members(event_id, participant_id, name, color, sort_order) values
+('YOUR_EVENT_ID', 'p1', 'Kieeesch', '#f26b4f', 1),
+('YOUR_EVENT_ID', 'p2', 'Lilli', '#4cc9a4', 2),
+('YOUR_EVENT_ID', 'p3', 'Jule', '#f6c85f', 3),
+('YOUR_EVENT_ID', 'p4', 'Matze', '#91a7ff', 4),
+('YOUR_EVENT_ID', 'p5', 'Benni', '#d28cff', 5);
+```
+
+8. In **Project Settings → API**, copy:
    - Project URL
    - Project anon/public key
 
@@ -101,12 +116,11 @@ The repository's [`netlify.toml`](./netlify.toml) tells Netlify's secret scanner
 
 Open the Netlify URL on two devices:
 
-1. Open **Phone tracker** on the first device.
-2. Start browser tracking and allow location access.
-3. Confirm that a position appears on the second device's map.
-4. Stop tracking and verify that the last location remains visible with its age.
-
-The browser tracker requires the deployed HTTPS URL and an active page. It is a fallback, not the preferred 12-hour iPhone tracker.
+1. Open the dashboard on two devices.
+2. Start a round on the first device.
+3. Confirm the active round appears on the second device.
+4. Perform a handover and confirm both devices update.
+5. Send an OwnTracks test location and confirm its marker appears.
 
 ## OwnTracks configuration
 
@@ -210,7 +224,6 @@ Keep the OwnTracks function endpoint private to the team. If the phone is lost, 
 - Confirm the location timestamp updates after the screen locks.
 - Confirm the dashboard marks a stale location when updates stop.
 - Fully charge the phone and pack a power bank.
-- Keep the browser tracker available as a manual fallback.
 - Continue recording rounds manually if mobile coverage or GPS fails.
 
 AirTags and Garmin LiveTrack are not integrated. AirTags are suitable for locating equipment through Find My, but they do not provide a usable live-location API for this dashboard.

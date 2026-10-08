@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import MapPanel from './MapPanel';
 import { EventState, Location, Phase, Round } from './types';
-import { eventId, loadLatestLocations, saveLocation, supabase } from './supabase';
+import { eventId, loadLatestLocations, loadSharedState, mutateEvent, supabase } from './supabase';
 
-const STORAGE_KEY = 't24-dashboard-v1';
 const phases: { name: Phase; duration: number; distance: string }[] = [
   { name: 'Swim', duration: 4, distance: '1 km' },
   { name: 'Bike', duration: 12, distance: '21 km' },
@@ -23,22 +22,6 @@ const initialState: EventState = {
   locations: {},
 };
 
-function loadState(): EventState {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return initialState;
-    const parsed = JSON.parse(saved) as Partial<EventState>;
-    return {
-      ...initialState,
-      ...parsed,
-      members: initialState.members,
-      locations: parsed.locations ?? {},
-    };
-  } catch {
-    return initialState;
-  }
-}
-
 function formatDuration(seconds: number) {
   const minutes = Math.max(0, Math.round(seconds / 60));
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
@@ -57,12 +40,11 @@ function formatClock(iso?: string) {
 }
 
 function App() {
-  const [state, setState] = useState<EventState>(loadState);
+  const [state, setState] = useState<EventState>(initialState);
   const [now, setNow] = useState(Date.now());
-  const [tracking, setTracking] = useState(false);
-  const [tab, setTab] = useState<'dashboard' | 'track'>('dashboard');
-  const [watchId, setWatchId] = useState<number>();
   const [syncMessage, setSyncMessage] = useState('');
+  const [sharedLoading, setSharedLoading] = useState(Boolean(supabase));
+  const [mutationPending, setMutationPending] = useState(false);
   const [focusedParticipantId, setFocusedParticipantId] = useState<string>();
   const [lastLocationSync, setLastLocationSync] = useState<Date>();
   const [locationSyncing, setLocationSyncing] = useState(false);
@@ -70,12 +52,35 @@ function App() {
   const [paceError, setPaceError] = useState('');
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
-
-  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  function applySharedState(shared: Awaited<ReturnType<typeof loadSharedState>>) {
+    setState((current) => ({ ...current, ...shared }));
+  }
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client) {
+      setSyncMessage('Supabase is not configured; shared race controls are unavailable.');
+      return;
+    }
+    let cancelled = false;
+    const refreshSharedState = () => loadSharedState()
+      .then((shared) => { if (!cancelled) { applySharedState(shared); setSharedLoading(false); setSyncMessage(''); } })
+      .catch((error: Error) => { if (!cancelled) { setSharedLoading(false); setSyncMessage(`Shared state unavailable: ${error.message}`); } });
+    refreshSharedState();
+    const refreshTimer = window.setInterval(refreshSharedState, 30000);
+    const channel = client.channel(`event-state-${eventId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `id=eq.${eventId}` }, refreshSharedState)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter: `event_id=eq.${eventId}` }, refreshSharedState)
+      .subscribe();
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+      void client.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -109,7 +114,7 @@ function App() {
       loadLatestLocations()
       .then((locations) => {
         if (!cancelled) {
-          update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) });
+          setState((current) => ({ ...current, locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }));
           setLastLocationSync(new Date());
           setSyncMessage('');
         }
@@ -166,63 +171,34 @@ function App() {
     setState((current) => ({ ...current, ...patch }));
   }
 
-  function startRound() {
-    if (activeRound) return;
-    const round: Round = {
-      id: crypto.randomUUID(), phase: state.phase, participantId: active.id,
-      number: phaseRounds.length + 1, startedAt: new Date().toISOString(),
-    };
-    update({ rounds: [...state.rounds, round] });
+  async function performMutation(action: Parameters<typeof mutateEvent>[0], nextParticipantId?: string, phase?: Phase) {
+    if (!supabase) return;
+    setMutationPending(true);
+    try {
+      await mutateEvent(action, nextParticipantId, phase);
+      const shared = await loadSharedState();
+      applySharedState(shared);
+      setSyncMessage('');
+    } catch (error) {
+      setSyncMessage(`Action failed: ${(error as Error).message}`);
+    } finally {
+      setMutationPending(false);
+    }
   }
 
-  function finishRound() {
-    if (!activeRound) return;
-    update({
-      rounds: state.rounds.map((round) => round.id === activeRound.id
-        ? { ...round, finishedAt: new Date().toISOString() } : round),
-    });
-  }
+  function startRound() { void performMutation('start_round'); }
+  function finishRound() { void performMutation('finish_round'); }
 
   function setNext(id: string) {
-    update({ nextParticipantId: id });
+    void performMutation('set_next_participant', id);
   }
 
   function handover() {
-    if (activeRound) finishRound();
-    update({ activeParticipantId: next.id, nextParticipantId: state.members.find((member) => member.id !== next.id)?.id ?? next.id });
+    void performMutation('handover', next.id);
   }
 
   function reset() {
-    if (window.confirm('Reset this event and remove all recorded rounds?')) setState({ ...initialState, eventStartedAt: new Date().toISOString() });
-  }
-
-  function toggleTracking() {
-    if (tracking) {
-      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
-      setTracking(false);
-      return;
-    }
-    if (!navigator.geolocation) {
-      window.alert('Geolocation is not available on this device.');
-      return;
-    }
-    setTracking(true);
-    const id = navigator.geolocation.watchPosition(
-      (position) => {
-        const location: Location = {
-          participantId: active.id,
-          latitude: position.coords.latitude, longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy, recordedAt: new Date().toISOString(),
-        };
-        update({ locations: { ...state.locations, [location.participantId]: location } });
-        void saveLocation(location, active.id).catch((error: Error) => {
-          setSyncMessage(`Location upload failed: ${error.message}`);
-        });
-      },
-      () => setTracking(false),
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
-    );
-    setWatchId(id);
+    if (window.confirm('Reset this event and remove all recorded rounds?')) void performMutation('reset_event');
   }
 
   const activeLocation = state.locations[active.id];
@@ -247,21 +223,9 @@ function App() {
         <div><p className="eyebrow">T24 · TEAM DASHBOARD</p><h1>Keep moving.</h1></div>
         <button className="quiet-button" onClick={reset}>Reset</button>
       </header>
-      <nav className="tabs">
-        <button className={tab === 'dashboard' ? 'active' : ''} onClick={() => setTab('dashboard')}>Race board</button>
-        <button className={tab === 'track' ? 'active' : ''} onClick={() => setTab('track')}>Phone tracker</button>
-      </nav>
-      {tab === 'track' ? (
-        <section className="tracker-page">
-          <div className="section-heading"><div><p className="eyebrow">IPHONE SETUP</p><h2>Send your location</h2></div><span className={`status ${tracking ? 'good' : ''}`}>{tracking ? '● Tracking' : '○ Off'}</span></div>
-          <p className="muted">Keep this page open on the active participant’s iPhone as a fallback. With Supabase configured, updates are shared with every dashboard. For reliable background tracking, use OwnTracks and send it to a protected ingestion function.</p>
-          <button className="primary-button tracker-button" onClick={toggleTracking}>{tracking ? 'Stop phone tracking' : 'Start phone tracking'}</button>
-          {syncMessage && <p className="sync-message">{syncMessage}</p>}
-          {activeLocation && <p className="muted">Active participant: {active.name} · last location {locationAge}s ago · accuracy ±{Math.round(activeLocation.accuracy ?? 0)}m</p>}
-          <MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} />
-        </section>
-      ) : (
-        <>
+      {sharedLoading && <p className="sync-message">Loading shared race state…</p>}
+      {syncMessage && <p className="sync-message">{syncMessage}</p>}
+      <>
           <section className="hero-grid">
             <div className="phase-card">
               <div className="section-heading"><div><p className="eyebrow">CURRENT PHASE</p><h2>{state.phase}</h2></div><span className="phase-dot" /></div>
@@ -276,9 +240,9 @@ function App() {
             </div>
           </section>
           <section className="control-panel">
-            <button className="primary-button" onClick={activeRound ? finishRound : startRound}>{activeRound ? 'Finish round' : startLabel}</button>
-            <div className="handover-row"><label htmlFor="next">Next up</label><select id="next" value={state.nextParticipantId} onChange={(event) => setNext(event.target.value)}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button className="secondary-button" onClick={handover}>Handover to {next.name}</button></div>
-            <div className="phase-switcher"><span>Phase</span>{phases.map((phase) => <button key={phase.name} className={state.phase === phase.name ? 'selected' : ''} onClick={() => update({ phase: phase.name })}>{phase.name}</button>)}</div>
+            <button className="primary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={activeRound ? finishRound : startRound}>{activeRound ? 'Finish round' : startLabel}</button>
+            <div className="handover-row"><label htmlFor="next">Next up</label><select id="next" value={state.nextParticipantId} onChange={(event) => setNext(event.target.value)} disabled={mutationPending}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button className="secondary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={handover}>Handover to {next.name}</button></div>
+            <div className="phase-switcher"><span>Phase</span>{phases.map((phase) => <button key={phase.name} className={state.phase === phase.name ? 'selected' : ''} disabled={mutationPending} onClick={() => void performMutation('change_phase', undefined, phase.name)}>{phase.name}</button>)}</div>
           </section>
           <section className="content-grid">
             <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>Who is resting</h2></div><span className="muted">{completedRounds.length} rounds</span></div>
@@ -294,8 +258,7 @@ function App() {
             {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDuration(duration)}</b></div>; })}</div>}
           </section>
         </>
-      )}
-      <footer><span>Local-first MVP · changes save on this device</span><span>Phase ETA uses the last 3 completed rounds</span></footer>
+      <footer><span>Shared race state · OwnTracks locations</span><span>Phase ETA uses the last 3 completed rounds</span></footer>
     </main>
   );
 }

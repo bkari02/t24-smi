@@ -32,3 +32,11 @@ export type EventState = {
   rounds: Round[];
   locations: Record<string, Location>;
 };
+
+export type SharedEvent = {
+  id: string;
+  eventStartedAt: string;
+  phase: Phase;
+  activeParticipantId: string;
+  nextParticipantId: string;
+};
