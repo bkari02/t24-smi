@@ -1,0 +1,33 @@
+export type Phase = 'Swim' | 'Bike' | 'Run';
+
+export type TeamMember = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+export type Round = {
+  id: string;
+  phase: Phase;
+  participantId: string;
+  number: number;
+  startedAt: string;
+  finishedAt?: string;
+};
+
+export type Location = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  recordedAt: string;
+};
+
+export type EventState = {
+  eventStartedAt: string;
+  members: TeamMember[];
+  phase: Phase;
+  activeParticipantId: string;
+  nextParticipantId: string;
+  rounds: Round[];
+  location?: Location;
+};

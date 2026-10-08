@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="StravaGPX" version="1.1" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+ <metadata>
+  <name>T24 BORMES LES MIMOSAS - NATATION</name>
+  <author>
+   <name>T24  XTREM TRIATHLON</name>
+   <link href="https://www.strava.com/athletes/118372609"/>
+  </author>
+  <copyright author="OpenStreetMap contributors">
+   <year>2020</year>
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+  <link href="https://www.strava.com/routes/3290068559116593598"/>
+ </metadata>
+ <trk>
+  <name>T24 BORMES LES MIMOSAS - NATATION</name>
+  <link href="https://www.strava.com/routes/3290068559116593598"/>
+  <type>swimming</type>
+  <trkseg>
+   <trkpt lat="43.12142" lon="6.361860000000001">
+    <ele>0.04</ele>
+   </trkpt>
+   <trkpt lat="43.12091500079301" lon="6.362300003675229">
+    <ele>-0.01</ele>
+   </trkpt>
+   <trkpt lat="43.12041000000001" lon="6.3627400000000005">
+    <ele>0.01</ele>
+   </trkpt>
+   <trkpt lat="43.11963000005555" lon="6.3626749975141745">
+    <ele>-0.01</ele>
+   </trkpt>
+   <trkpt lat="43.11885000007432" lon="6.362609996685645">
+    <ele>-0.01</ele>
+   </trkpt>
+   <trkpt lat="43.11807000005629" lon="6.362544997514323">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.117290000000004" lon="6.362480000000001">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.11761000193541" lon="6.361805003631947">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.11793" lon="6.36113">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.11875000040668" lon="6.361346660858789">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.11957000040456" lon="6.3615633275247925">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.12039" lon="6.36178">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.120890000002305" lon="6.361784999959162">
+    <ele>0.0</ele>
+   </trkpt>
+   <trkpt lat="43.121390000000005" lon="6.361790000000001">
+    <ele>0.05</ele>
+   </trkpt>
+  </trkseg>
+ </trk>
+</gpx>

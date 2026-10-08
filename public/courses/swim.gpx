@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="T24 Team Dashboard" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>T24 Bormes les Mimosas - Natation</name><trkseg>
+    <trkpt lat="43.12142" lon="6.36186"/>
+    <trkpt lat="43.120915" lon="6.3623"/>
+    <trkpt lat="43.12041" lon="6.36274"/>
+    <trkpt lat="43.11963" lon="6.362675"/>
+    <trkpt lat="43.11885" lon="6.36261"/>
+    <trkpt lat="43.11807" lon="6.362545"/>
+    <trkpt lat="43.11729" lon="6.36248"/>
+    <trkpt lat="43.11761" lon="6.361805"/>
+    <trkpt lat="43.11793" lon="6.36113"/>
+    <trkpt lat="43.11875" lon="6.361347"/>
+    <trkpt lat="43.11957" lon="6.361563"/>
+    <trkpt lat="43.12039" lon="6.36178"/>
+    <trkpt lat="43.12089" lon="6.361785"/>
+    <trkpt lat="43.12139" lon="6.36179"/>
+  </trkseg></trk>
+</gpx>

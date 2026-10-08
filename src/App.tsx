@@ -1,0 +1,232 @@
+import { useEffect, useState } from 'react';
+import MapPanel from './MapPanel';
+import { EventState, Location, Phase, Round } from './types';
+import { eventId, loadLatestLocation, saveLocation, supabase } from './supabase';
+
+const STORAGE_KEY = 't24-dashboard-v1';
+const phases: { name: Phase; duration: number; distance: string }[] = [
+  { name: 'Swim', duration: 4, distance: '1 km' },
+  { name: 'Bike', duration: 12, distance: '21 km' },
+  { name: 'Run', duration: 8, distance: '4 km' },
+];
+const colors = ['#f26b4f', '#4cc9a4', '#f6c85f', '#91a7ff', '#d28cff'];
+
+const initialState: EventState = {
+  eventStartedAt: new Date().toISOString(),
+  phase: 'Swim',
+  activeParticipantId: 'p1',
+  nextParticipantId: 'p2',
+  members: ['Anna', 'Marko', 'Petra', 'Jonas', 'Sofia'].map((name, index) => ({
+    id: `p${index + 1}`, name, color: colors[index],
+  })),
+  rounds: [],
+};
+
+function loadState(): EventState {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) as EventState : initialState;
+  } catch {
+    return initialState;
+  }
+}
+
+function formatDuration(seconds: number) {
+  const minutes = Math.max(0, Math.round(seconds / 60));
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+}
+
+function formatClock(iso?: string) {
+  return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+}
+
+function App() {
+  const [state, setState] = useState<EventState>(loadState);
+  const [now, setNow] = useState(Date.now());
+  const [tracking, setTracking] = useState(false);
+  const [tab, setTab] = useState<'dashboard' | 'track'>('dashboard');
+  const [watchId, setWatchId] = useState<number>();
+  const [syncMessage, setSyncMessage] = useState('');
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client) return;
+    let cancelled = false;
+    loadLatestLocation()
+      .then((location) => {
+        if (!cancelled && location) update({ location });
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setSyncMessage(`Location sync unavailable: ${error.message}`);
+      });
+    const channel = client
+      .channel(`locations-${eventId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'locations',
+        filter: `event_id=eq.${eventId}`,
+      }, (payload) => {
+        const row = payload.new as { latitude: number; longitude: number; accuracy: number | null; recorded_at: string };
+        update({
+          location: {
+            latitude: row.latitude, longitude: row.longitude,
+            accuracy: row.accuracy ?? undefined, recordedAt: row.recorded_at,
+          },
+        });
+      })
+      .subscribe();
+    return () => {
+      cancelled = true;
+      void client.removeChannel(channel);
+    };
+  }, []);
+
+  const active = state.members.find((member) => member.id === state.activeParticipantId) ?? state.members[0];
+  const next = state.members.find((member) => member.id === state.nextParticipantId) ?? state.members[1];
+  const activeRound = [...state.rounds].reverse().find((round) => round.participantId === active.id && !round.finishedAt);
+  const completedRounds = state.rounds.filter((round) => round.finishedAt);
+  const phaseConfig = phases.find((phase) => phase.name === state.phase)!;
+  const phaseRounds = completedRounds.filter((round) => round.phase === state.phase);
+  const recentDurations = phaseRounds.slice(-3).map((round) =>
+    (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000);
+  const typicalDuration = recentDurations.length
+    ? recentDurations.sort((a, b) => a - b)[Math.floor(recentDurations.length / 2)]
+    : state.phase === 'Swim' ? 20 * 60 : state.phase === 'Bike' ? 48 * 60 : 25 * 60;
+  const elapsed = activeRound ? (now - new Date(activeRound.startedAt).getTime()) / 1000 : 0;
+  const phaseEndsAt = new Date(state.eventStartedAt).getTime() + phases
+    .slice(0, phases.findIndex((phase) => phase.name === state.phase) + 1)
+    .reduce((sum, phase) => sum + phase.duration * 3600000, 0);
+  const remaining = Math.max(0, (phaseEndsAt - now) / 1000);
+
+  function update(patch: Partial<EventState>) {
+    setState((current) => ({ ...current, ...patch }));
+  }
+
+  function startRound() {
+    if (activeRound) return;
+    const round: Round = {
+      id: crypto.randomUUID(), phase: state.phase, participantId: active.id,
+      number: phaseRounds.length + 1, startedAt: new Date().toISOString(),
+    };
+    update({ rounds: [...state.rounds, round] });
+  }
+
+  function finishRound() {
+    if (!activeRound) return;
+    update({
+      rounds: state.rounds.map((round) => round.id === activeRound.id
+        ? { ...round, finishedAt: new Date().toISOString() } : round),
+    });
+  }
+
+  function setNext(id: string) {
+    update({ nextParticipantId: id });
+  }
+
+  function handover() {
+    if (activeRound) finishRound();
+    update({ activeParticipantId: next.id, nextParticipantId: state.members.find((member) => member.id !== next.id)?.id ?? next.id });
+  }
+
+  function reset() {
+    if (window.confirm('Reset this event and remove all recorded rounds?')) setState({ ...initialState, eventStartedAt: new Date().toISOString() });
+  }
+
+  function toggleTracking() {
+    if (tracking) {
+      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+      setTracking(false);
+      return;
+    }
+    if (!navigator.geolocation) {
+      window.alert('Geolocation is not available on this device.');
+      return;
+    }
+    setTracking(true);
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        const location: Location = {
+          latitude: position.coords.latitude, longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy, recordedAt: new Date().toISOString(),
+        };
+        update({ location });
+        void saveLocation(location, active.id).catch((error: Error) => {
+          setSyncMessage(`Location upload failed: ${error.message}`);
+        });
+      },
+      () => setTracking(false),
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
+    );
+    setWatchId(id);
+  }
+
+  const locationAge = state.location ? Math.round((now - new Date(state.location.recordedAt).getTime()) / 1000) : undefined;
+  const startLabel = activeRound ? `Round ${activeRound.number} in progress` : 'Start next round';
+
+  return (
+    <main>
+      <header className="topbar">
+        <div><p className="eyebrow">T24 · TEAM DASHBOARD</p><h1>Keep moving.</h1></div>
+        <button className="quiet-button" onClick={reset}>Reset</button>
+      </header>
+      <nav className="tabs">
+        <button className={tab === 'dashboard' ? 'active' : ''} onClick={() => setTab('dashboard')}>Race board</button>
+        <button className={tab === 'track' ? 'active' : ''} onClick={() => setTab('track')}>Phone tracker</button>
+      </nav>
+      {tab === 'track' ? (
+        <section className="tracker-page">
+          <div className="section-heading"><div><p className="eyebrow">IPHONE SETUP</p><h2>Send your location</h2></div><span className={`status ${tracking ? 'good' : ''}`}>{tracking ? '● Tracking' : '○ Off'}</span></div>
+          <p className="muted">Keep this page open on the active participant’s iPhone as a fallback. With Supabase configured, updates are shared with every dashboard. For reliable background tracking, use OwnTracks and send it to a protected ingestion function.</p>
+          <button className="primary-button tracker-button" onClick={toggleTracking}>{tracking ? 'Stop phone tracking' : 'Start phone tracking'}</button>
+          {syncMessage && <p className="sync-message">{syncMessage}</p>}
+          {state.location && <p className="muted">Last location: {locationAge}s ago · accuracy ±{Math.round(state.location.accuracy ?? 0)}m</p>}
+          <MapPanel location={state.location} />
+        </section>
+      ) : (
+        <>
+          <section className="hero-grid">
+            <div className="phase-card">
+              <div className="section-heading"><div><p className="eyebrow">CURRENT PHASE</p><h2>{state.phase}</h2></div><span className="phase-dot" /></div>
+              <div className="countdown">{formatDuration(remaining)}</div>
+              <div className="phase-meta"><span>{phaseConfig.distance} rounds</span><span>{phaseConfig.duration}h total</span></div>
+            </div>
+            <div className="active-card" style={{ borderColor: active.color }}>
+              <p className="eyebrow">ACTIVE NOW</p><h2>{active.name}</h2>
+              <p className="active-time">{activeRound ? `${formatDuration(elapsed)} elapsed` : 'Waiting at transition'}</p>
+              <div className="round-pill">{activeRound ? `Round ${activeRound.number}` : `Next: round ${phaseRounds.length + 1}`}</div>
+            </div>
+          </section>
+          <section className="control-panel">
+            <button className="primary-button" onClick={activeRound ? finishRound : startRound}>{activeRound ? 'Finish round' : startLabel}</button>
+            <div className="handover-row"><label htmlFor="next">Next up</label><select id="next" value={state.nextParticipantId} onChange={(event) => setNext(event.target.value)}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button className="secondary-button" onClick={handover}>Handover to {next.name}</button></div>
+            <div className="phase-switcher"><span>Phase</span>{phases.map((phase) => <button key={phase.name} className={state.phase === phase.name ? 'selected' : ''} onClick={() => update({ phase: phase.name })}>{phase.name}</button>)}</div>
+          </section>
+          <section className="content-grid">
+            <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>Who is resting</h2></div><span className="muted">{completedRounds.length} rounds</span></div>
+              {state.members.map((member) => {
+                const lastRound = [...completedRounds].reverse().find((round) => round.participantId === member.id);
+                return <div className="member-row" key={member.id}><span className="member-dot" style={{ background: member.color }} /><strong>{member.name}</strong><span className="member-stat">{member.id === active.id ? 'Active' : lastRound ? `Last ${formatClock(lastRound.finishedAt)}` : 'Ready'}</span>{member.id === next.id && <span className="next-tag">NEXT</span>}</div>;
+              })}
+              <div className="next-estimate"><span>Estimated next handover</span><strong>{activeRound ? formatClock(new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000).toISOString()) : '--:--'}</strong></div>
+            </div>
+            <div className="panel map-panel"><div className="section-heading"><div><p className="eyebrow">LIVE MAP</p><h2>{state.location ? 'Active participant' : 'Course preview'}</h2></div>{state.location && <span className={`status ${locationAge !== undefined && locationAge < 60 ? 'good' : ''}`}>{locationAge}s ago</span>}</div><MapPanel location={state.location} /></div>
+          </section>
+          <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>Latest rounds</h2></div><span className="muted">{phaseConfig.distance} per round</span></div>
+            {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDuration(duration)}</b></div>; })}</div>}
+          </section>
+        </>
+      )}
+      <footer><span>Local-first MVP · changes save on this device</span><span>Phase ETA uses the last 3 completed rounds</span></footer>
+    </main>
+  );
+}
+
+export default App;
