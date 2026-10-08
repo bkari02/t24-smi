@@ -15,6 +15,9 @@ The dashboard tracks the active participant, next handover, round times, phase c
 - Leaflet/OpenStreetMap map
 - Supabase location storage and Realtime updates when configured
 - Browser geolocation fallback
+- Manual and automatic location refresh every 30 seconds
+- Clickable participant rows for map focus
+- Editable per-participant pace estimates in [`public/data/pace-estimates.csv`](./public/data/pace-estimates.csv)
 
 ## Run locally
 
@@ -224,3 +227,14 @@ VITE_T24_EVENT_TOKEN=replace-with-a-long-random-event-token
 ```
 
 After changing environment variables, restart Vite or redeploy Netlify.
+
+## Pace estimates
+
+Edit [`public/data/pace-estimates.csv`](./public/data/pace-estimates.csv) before the event. Times are minutes for one round:
+
+```csv
+participant_id,participant_name,swim_minutes,bike_minutes,run_minutes
+p1,Kieeesch,20,48,25
+```
+
+The dashboard uses the matching participant and phase estimate for the first lap. Once at least one lap in the current phase has been completed, the estimate switches to the median of the most recent three completed laps in that phase. This means the second lap onward is based on observed race times rather than the CSV default.

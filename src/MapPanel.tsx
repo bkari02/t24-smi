@@ -15,9 +15,10 @@ type Props = {
   members: TeamMember[];
   activeParticipantId: string;
   phase: Phase;
+  focusedParticipantId?: string;
 };
 
-export default function MapPanel({ locations, members, activeParticipantId, phase }: Props) {
+export default function MapPanel({ locations, members, activeParticipantId, phase, focusedParticipantId }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map>();
   const markers = useRef<Record<string, L.CircleMarker>>({});
@@ -32,7 +33,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       maxZoom: 19,
     }).addTo(instance);
     routeLayers.current.Swim = L.polyline(swimRoute, {
-      color: '#f26b4f', weight: 5, opacity: 0.9,
+      color: '#f6c85f', weight: 5, opacity: 0.9,
     }).addTo(instance);
     startMarkers.current.Swim = L.circleMarker(swimRoute[0])
       .bindTooltip('Swim start / handover')
@@ -146,6 +147,15 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       );
     }
   }, [activeParticipantId, locations, members]);
+
+  useEffect(() => {
+    const instance = map.current;
+    const location = focusedParticipantId ? locations[focusedParticipantId] : undefined;
+    if (!instance || !location) return;
+    const marker = markers.current[focusedParticipantId!];
+    instance.setView([location.latitude, location.longitude], Math.max(instance.getZoom(), 15));
+    marker?.openTooltip();
+  }, [focusedParticipantId, locations]);
 
   return <div className="map-shell"><div className="map" ref={element} /></div>;
 }
