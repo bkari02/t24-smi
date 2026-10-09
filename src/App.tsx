@@ -1,7 +1,7 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { CSSProperties, FormEvent, useEffect, useRef, useState } from 'react';
 import MapPanel from './MapPanel';
 import { EventState, Location, Phase, Round } from './types';
-import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerTotals, loadLatestLocations, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, supabase } from './supabase';
+import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, loadCheerSummary, loadLatestLocations, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, supabase } from './supabase';
 import { loadRouteProgress, RouteProgress } from './routeProgress';
 
 const phases: { name: Phase; duration: number; distance: string }[] = [
@@ -10,6 +10,13 @@ const phases: { name: Phase; duration: number; distance: string }[] = [
   { name: 'Run', duration: 8, distance: '4 km' },
 ];
 const colors = ['#f26b4f', '#4cc9a4', '#f6c85f', '#91a7ff', '#d28cff'];
+const participantImages: Record<string, string> = {
+  p1: '/data/kieeesch.PNG',
+  p2: '/data/lilli.PNG',
+  p3: '/data/jule.PNG',
+  p4: '/data/matze.PNG',
+  p5: '/data/benni.PNG',
+};
 
 const initialState: EventState = {
   eventStartedAt: new Date().toISOString(),
@@ -17,7 +24,7 @@ const initialState: EventState = {
   activeParticipantId: 'p1',
   nextParticipantId: 'p2',
   members: ['Kieeesch', 'Lilli', 'Jule', 'Matze', 'Benni'].map((name, index) => ({
-    id: `p${index + 1}`, name, color: colors[index],
+    id: `p${index + 1}`, name, color: colors[index], imageUrl: participantImages[`p${index + 1}`],
   })),
   rounds: [],
   locations: {},
@@ -57,6 +64,13 @@ function App() {
   const [memberLoginError, setMemberLoginError] = useState('');
   const [viewerCount, setViewerCount] = useState<number>();
   const [cheers, setCheers] = useState<Record<string, number>>({});
+  const [recentCheers, setRecentCheers] = useState<Record<string, number>>({});
+  const [cheerGraph, setCheerGraph] = useState<{ bucket: string; total: number }[]>([]);
+  const [cheerBurst, setCheerBurst] = useState(0);
+  const [cheerCelebration, setCheerCelebration] = useState(false);
+  const [celebrationLevel, setCelebrationLevel] = useState(1);
+  const cheerSummaryLoaded = useRef(false);
+  const celebrationTimer = useRef<number>();
   const [cheerPending, setCheerPending] = useState(false);
   const [routeProgress, setRouteProgress] = useState<RouteProgress>();
   const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem('t24-theme') === 'dark');
@@ -96,11 +110,31 @@ function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    const refreshCheers = () => { void loadCheerTotals().then((rows) => setCheers(Object.fromEntries(rows.map((row) => [row.participantId, row.total])))).catch(() => undefined); };
+    const refreshCheers = () => {
+      void loadCheerSummary().then((rows) => {
+        const nextTotals = Object.fromEntries(rows.map((row) => [row.participantId, row.total]));
+        const nextRecent = Object.fromEntries(rows.map((row) => [row.participantId, row.recent]));
+        setCheers((previous) => {
+          const incoming = rows.reduce((sum, row) => sum + Math.max(0, row.total - (previous[row.participantId] ?? 0)), 0);
+          if (cheerSummaryLoaded.current && incoming > 0) {
+            setCheerBurst((current) => current + 1);
+            setCelebrationLevel(1);
+            setCelebrationLevel(Math.min(5, incoming));
+            setCheerCelebration(true);
+            if (celebrationTimer.current) window.clearTimeout(celebrationTimer.current);
+            celebrationTimer.current = window.setTimeout(() => setCheerCelebration(false), 1600);
+          }
+          return nextTotals;
+        });
+        setRecentCheers(nextRecent);
+        cheerSummaryLoaded.current = true;
+      }).catch(() => undefined);
+      void loadCheerHourly(state.activeParticipantId).then(setCheerGraph).catch(() => undefined);
+    };
     refreshCheers();
-    const timer = window.setInterval(refreshCheers, 180000);
+    const timer = window.setInterval(refreshCheers, 30000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [state.activeParticipantId]);
 
   function applySharedState(shared: Awaited<ReturnType<typeof loadSharedState>>) {
     setState((current) => ({ ...current, ...shared }));
@@ -263,6 +297,10 @@ function App() {
     : undefined;
   const estimateSource = recentDurations.length ? 'recent phase laps' : 'CSV estimate';
   const canControl = view === 'member' && memberAuthed;
+  const activeRecentCheers = recentCheers[active.id] ?? 0;
+  const recentCheerScale = Math.min(1.55, 1 + activeRecentCheers * 0.09);
+  const recentCheerTone = activeRecentCheers >= 10 ? 'hot' : activeRecentCheers >= 4 ? 'warm' : 'cool';
+  const maxGraphValue = Math.max(1, ...cheerGraph.map((item) => item.total));
 
   useEffect(() => {
     if (view !== 'athlete') return;
@@ -273,8 +311,17 @@ function App() {
     setCheerPending(true);
     const nonce = crypto.randomUUID();
     void recordCheer(active.id, nonce)
-      .then(() => loadCheerTotals())
-      .then((rows) => setCheers(Object.fromEntries(rows.map((row) => [row.participantId, row.total]))))
+      .then(() => loadCheerSummary())
+      .then((rows) => {
+        setCheers(Object.fromEntries(rows.map((row) => [row.participantId, row.total])));
+        setRecentCheers(Object.fromEntries(rows.map((row) => [row.participantId, row.recent])));
+        setCheerBurst((current) => current + 1);
+        setCheerCelebration(true);
+        if (celebrationTimer.current) window.clearTimeout(celebrationTimer.current);
+        celebrationTimer.current = window.setTimeout(() => setCheerCelebration(false), 1600);
+        return loadCheerHourly(active.id);
+      })
+      .then(setCheerGraph)
       .catch((error: Error) => setSyncMessage(`Cheer failed: ${error.message}`))
       .finally(() => setCheerPending(false));
   }
@@ -294,13 +341,18 @@ function App() {
 
   return (
     <main>
+      {cheerCelebration && <div className={`cheer-celebration intensity-${celebrationLevel}`} aria-hidden="true"><strong>KEEP IT SMI!</strong>{Array.from({ length: 48 + celebrationLevel * 18 }, (_, index) => <span key={index} style={{ '--i': index } as CSSProperties} />)}</div>}
       <header className="topbar">
-        <div><p className="eyebrow">T24 · TEAM DASHBOARD</p><h2>Keep moving.</h2></div>
+        <div><p className="eyebrow">T24 XTREME TRIATHLON · SMIBOARD </p><h2>Never Schmu, always Smi!</h2></div>
         <div className="header-actions">
-          <button className="quiet-button" onClick={() => setView('fan')}>Fan</button>
-          <button className="quiet-button" onClick={() => setView('member')}>Team</button>
-          <button className="quiet-button" onClick={() => setView('athlete')}>Athlete</button>
-          <button className="quiet-button cheer-button" onClick={cheer} disabled={cheerPending || !supabase}>Cheer {active.name} · {cheers[active.id] ?? 0}</button>
+          <label className="mode-select">Mode
+            <select value={view} onChange={(event) => setView(event.target.value as 'fan' | 'member' | 'athlete')}>
+              <option value="fan">Fan</option>
+              <option value="member">Team member</option>
+              <option value="athlete">Athlete</option>
+            </select>
+          </label>
+          <button className="quiet-button cheer-button" onClick={cheer} disabled={cheerPending || !supabase}>Cheer for {active.name} · {cheers[active.id] ?? 0}</button>
           <button className="quiet-button theme-toggle" onClick={() => setDarkMode((current) => !current)}>{darkMode ? 'Light mode' : 'Dark mode'}</button>
           {canControl && <button className="quiet-button" onClick={reset}>Reset</button>}
         </div>
@@ -310,7 +362,7 @@ function App() {
       {sharedLoading && <p className="sync-message">Loading shared race state…</p>}
       {syncMessage && <p className="sync-message">{syncMessage}</p>}
       <>
-          <section className="panel map-panel map-priority"><div className="section-heading"><div><p className="eyebrow">LIVE MAP · PRIMARY VIEW</p><h2>{Object.keys(state.locations).length ? 'All participants' : 'Course preview'}</h2></div><div className="map-actions"><span className="map-live-indicator"><span className="member-dot" style={{ background: active.color }} />{active.name} · {state.phase}</span><button className="refresh-button" onClick={() => loadLatestLocations().then((locations) => { update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }); setLastLocationSync(new Date()); }).catch((error: Error) => setSyncMessage(`Location refresh failed: ${error.message}`))} disabled={locationSyncing}>{locationSyncing ? 'Refreshing…' : 'Refresh'}</button>{lastLocationSync && <span className="status">Updated {Math.max(0, Math.round((now - lastLocationSync.getTime()) / 1000))}s ago</span>}</div></div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} /></section>
+          <section className="panel map-panel map-priority"><div className="section-heading"><div><p className="eyebrow">LIVE MAP</p><h2>{Object.keys(state.locations).length ? 'All participants' : 'Course preview'}</h2></div><div className="map-actions"><span className="map-live-indicator"><span className="member-dot" style={{ background: active.color }} />{active.name} · {state.phase}</span><button className="refresh-button" onClick={() => loadLatestLocations().then((locations) => { update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }); setLastLocationSync(new Date()); }).catch((error: Error) => setSyncMessage(`Location refresh failed: ${error.message}`))} disabled={locationSyncing}>{locationSyncing ? 'Refreshing…' : 'Refresh'}</button>{lastLocationSync && <span className="status">Updated {Math.max(0, Math.round((now - lastLocationSync.getTime()) / 1000))}s ago</span>}</div></div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} /></section>
           <section className="hero-grid">
             <div className="phase-card">
               <div className="section-heading"><div><p className="eyebrow">CURRENT PHASE</p><h2>{state.phase}</h2></div><span className="phase-dot" /></div>
@@ -318,7 +370,8 @@ function App() {
               <div className="phase-meta"><span>{phaseConfig.distance} rounds</span><span>{phaseConfig.duration}h total</span></div>
             </div>
             <div className="active-card" style={{ borderColor: active.color }}>
-              <p className="eyebrow">ACTIVE NOW</p><h2>{active.name}</h2>
+              <div className="active-heading"><div><p className="eyebrow">ACTIVE NOW</p><h2>{active.name}</h2></div><div className="cheer-graph" aria-label="Cheers received during the last hour"><span>CHEERS OVER LAST HOUR</span><div className="cheer-bars">{cheerGraph.map((item) => <i key={item.bucket} style={{ height: `${Math.max(8, (item.total / maxGraphValue) * 100)}%` }} title={`${item.total} cheers`} />)}</div></div></div>
+              <div key={cheerBurst} className={`recent-cheers ${recentCheerTone}`} style={{ transform: `scale(${recentCheerScale})` }}>+{activeRecentCheers} <span>recent cheers</span></div>
               <p className="active-time">{activeRound ? `${formatDurationWithSeconds(elapsed)} elapsed` : 'Waiting at transition'}</p>
               <div className="round-pill">{activeRound ? `Round ${activeRound.number}` : `Next: round ${phaseRounds.length + 1}`}</div>
               {estimatedFinish && typicalDuration !== undefined && estimatedFinishIn !== undefined && <p className="estimate">Estimated finish {formatClock(estimatedFinish.toISOString(), true)}<span className="estimate-countdown">in {formatDurationWithSeconds(estimatedFinishIn)}</span><small>Based on {estimateSource} · {formatDurationWithSeconds(typicalDuration)}</small></p>}
@@ -333,8 +386,8 @@ function App() {
           <section className="content-grid">
             <div className="rotation-grid">
               <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>Active & next</h2></div><span className="muted">{completedRounds.length} rounds</span></div>
-                <button className={`member-row featured ${focusedParticipantId === active.id ? 'focused' : ''}`} onClick={() => focusParticipant(active.id)}><span className="member-dot" style={{ background: active.color }} /><strong>{active.name}</strong><span className="member-stat">Active</span></button>
-                <button className={`member-row featured ${focusedParticipantId === next.id ? 'focused' : ''}`} onClick={() => focusParticipant(next.id)}><span className="member-dot" style={{ background: next.color }} /><strong>{next.name}</strong><span className="member-stat">Next up</span><span className="next-tag">NEXT</span></button>
+                <button className={`member-row featured ${focusedParticipantId === active.id ? 'focused' : ''}`} onClick={() => focusParticipant(active.id)}>{active.imageUrl ? <img className="participant-avatar" src={active.imageUrl} alt="" /> : <span className="member-dot" style={{ background: active.color }} />}<strong>{active.name}</strong><span className="member-stat">Active</span></button>
+                <button className={`member-row featured ${focusedParticipantId === next.id ? 'focused' : ''}`} onClick={() => focusParticipant(next.id)}>{next.imageUrl ? <img className="participant-avatar" src={next.imageUrl} alt="" /> : <span className="member-dot" style={{ background: next.color }} />}<strong>{next.name}</strong><span className="member-stat">Next up</span><span className="next-tag">NEXT</span></button>
                 <div className="next-estimate"><span>Estimated next handover</span><strong>{activeRound && typicalDuration !== undefined ? formatClock(new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000).toISOString(), true) : '--:--'}</strong></div>
               </div>
               <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>Resting order</h2></div><span className="muted">Longest rest first</span></div>
@@ -347,7 +400,7 @@ function App() {
                   return new Date(lastA).getTime() - new Date(lastB).getTime();
                 }).map((member) => {
                   const lastRound = [...completedRounds].reverse().find((round) => round.participantId === member.id);
-                  return <button className={`member-row ${focusedParticipantId === member.id ? 'focused' : ''}`} key={member.id} onClick={() => focusParticipant(member.id)}><span className="member-dot" style={{ background: member.color }} /><strong>{member.name}</strong><span className="member-stat">{lastRound ? `Last ${formatClock(lastRound.finishedAt)}` : 'Ready'}</span></button>;
+                  return <button className={`member-row ${focusedParticipantId === member.id ? 'focused' : ''}`} key={member.id} onClick={() => focusParticipant(member.id)}>{member.imageUrl ? <img className="participant-avatar" src={member.imageUrl} alt="" /> : <span className="member-dot" style={{ background: member.color }} />}<strong>{member.name}</strong><span className="member-stat">{lastRound ? `Last ${formatClock(lastRound.finishedAt)}` : 'Ready'}</span></button>;
                 })}
               </div>
             </div>

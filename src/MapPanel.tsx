@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Location, Phase, TeamMember } from './types';
 
@@ -21,7 +21,9 @@ type Props = {
 export default function MapPanel({ locations, members, activeParticipantId, phase, focusedParticipantId }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map>();
-  const markers = useRef<Record<string, L.CircleMarker>>({});
+  const [mapReady, setMapReady] = useState(false);
+  const markers = useRef<Record<string, L.Marker | L.CircleMarker>>({});
+  const imageMarkerData = useRef<Record<string, { marker: L.Marker; imageUrl: string; active: boolean }>>({});
   const routeLayers = useRef<Partial<Record<Phase, L.Polyline>>>({});
   const startMarkers = useRef<Partial<Record<Phase, L.CircleMarker>>>({});
 
@@ -40,6 +42,8 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       .addTo(instance);
     updateStartMarkerStyles(phase);
     map.current = instance;
+    setMapReady(true);
+    instance.on('zoomend', () => updateImageMarkerSizes(instance.getZoom()));
     let disposed = false;
     const courses: { phase: Phase; file: string; color: string }[] = [
       { phase: 'Bike', file: 'bike.gpx', color: '#f26b4f' },
@@ -87,6 +91,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       routeLayers.current = {};
       startMarkers.current = {};
       markers.current = {};
+      imageMarkerData.current = {};
     };
   }, []);
 
@@ -126,6 +131,19 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     });
   }
 
+  function updateImageMarkerSizes(zoom: number) {
+    const scale = Math.min(1.35, Math.max(0.65, 2 ** ((zoom - 15) / 4)));
+    Object.values(imageMarkerData.current).forEach(({ marker, imageUrl, active }) => {
+      const size = Math.round((active ? 36 : 29) * scale);
+      marker.setIcon(L.icon({
+        iconUrl: imageUrl,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+        className: `participant-map-marker${active ? ' active' : ''}`,
+      }));
+    });
+  }
+
   useEffect(() => {
     updateRouteStyles(phase);
     updateStartMarkerStyles(phase);
@@ -136,19 +154,35 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     if (!instance) return;
     Object.values(markers.current).forEach((marker) => marker.remove());
     markers.current = {};
+    imageMarkerData.current = {};
     Object.entries(locations).forEach(([participantId, location]) => {
       const member = members.find((item) => item.id === participantId);
       if (!member) return;
       const isActive = participantId === activeParticipantId;
       const point: L.LatLngExpression = [location.latitude, location.longitude];
-      markers.current[participantId] = L.circleMarker(point, {
-        radius: isActive ? 12 : 7,
-        color: isActive ? '#fff' : member.color,
-        weight: isActive ? 4 : 2,
-        fillColor: member.color,
-        fillOpacity: isActive ? 1 : 0.8,
-      }).bindTooltip(`${member.name}${isActive ? ' · active' : ''}`).addTo(instance);
+      const marker = member.imageUrl
+        ? L.marker(point, {
+          icon: L.icon({
+            iconUrl: member.imageUrl,
+            iconSize: [isActive ? 36 : 29, isActive ? 36 : 29],
+            iconAnchor: [isActive ? 18 : 14.5, isActive ? 18 : 14.5],
+            className: `participant-map-marker${isActive ? ' active' : ''}`,
+          }),
+          zIndexOffset: isActive ? 1000 : 0,
+        })
+        : L.circleMarker(point, {
+          radius: isActive ? 12 : 7,
+          color: isActive ? '#fff' : member.color,
+          weight: isActive ? 4 : 2,
+          fillColor: member.color,
+          fillOpacity: isActive ? 1 : 0.8,
+        });
+      markers.current[participantId] = marker.bindTooltip(`${member.name}${isActive ? ' · active' : ''}`).addTo(instance);
+      if (member.imageUrl && marker instanceof L.Marker) {
+        imageMarkerData.current[participantId] = { marker, imageUrl: member.imageUrl, active: isActive };
+      }
     });
+    updateImageMarkerSizes(instance.getZoom());
     const activeLocation = locations[activeParticipantId];
     if (activeLocation) {
       instance.setView(
@@ -156,7 +190,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
         Math.max(instance.getZoom(), 15),
       );
     }
-  }, [activeParticipantId, locations, members]);
+  }, [activeParticipantId, locations, members, mapReady]);
 
   useEffect(() => {
     const instance = map.current;

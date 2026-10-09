@@ -1,6 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { EventState, Location, Phase, Round, SharedEvent, TeamMember } from './types';
 
+const participantImages: Record<string, string> = {
+  p1: '/data/kieeesch.PNG',
+  p2: '/data/lilli.PNG',
+  p3: '/data/jule.PNG',
+  p4: '/data/matze.PNG',
+  p5: '/data/benni.PNG',
+};
+
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const eventId = import.meta.env.VITE_T24_EVENT_ID ?? 'demo-event';
@@ -23,6 +31,8 @@ export type MemberSession = {
 };
 
 export type CheerTotal = { participantId: string; total: number };
+export type CheerSummary = CheerTotal & { recent: number };
+export type CheerBucket = { bucket: string; total: number };
 
 function memberClient() {
   if (!url || !anonKey) throw new Error('Supabase is not configured');
@@ -82,6 +92,27 @@ export async function loadCheerTotals(): Promise<CheerTotal[]> {
   if (error) throw error;
   return ((data ?? []) as { participant_id: string; total: number }[]).map((row) => ({
     participantId: row.participant_id, total: Number(row.total),
+  }));
+}
+
+export async function loadCheerSummary(): Promise<CheerSummary[]> {
+  const { data, error } = await memberClient().rpc('t24_cheer_summary', { p_event_id: eventId });
+  if (error) throw error;
+  return ((data ?? []) as { participant_id: string; total: number; recent: number }[]).map((row) => ({
+    participantId: row.participant_id,
+    total: Number(row.total),
+    recent: Number(row.recent),
+  }));
+}
+
+export async function loadCheerHourly(participantId?: string): Promise<CheerBucket[]> {
+  const { data, error } = await memberClient().rpc('t24_cheer_hourly', {
+    p_event_id: eventId, p_participant_id: participantId ?? null,
+  });
+  if (error) throw error;
+  return ((data ?? []) as { bucket: string; total: number }[]).map((row) => ({
+    bucket: row.bucket,
+    total: Number(row.total),
   }));
 }
 
@@ -168,7 +199,7 @@ export async function loadSharedState(): Promise<Pick<EventState, 'eventStartedA
   const sharedEvent = fromEventRow(event as EventRow);
   return {
     ...sharedEvent,
-    members: (members as MemberRow[]).map((member) => ({ id: member.participant_id, name: member.name, color: member.color })),
+    members: (members as MemberRow[]).map((member) => ({ id: member.participant_id, name: member.name, color: member.color, imageUrl: participantImages[member.participant_id] })),
     rounds: (rounds as RoundRow[]).map(fromRoundRow),
   };
 }

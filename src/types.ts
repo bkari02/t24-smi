@@ -4,6 +4,7 @@ export type TeamMember = {
   id: string;
   name: string;
   color: string;
+  imageUrl?: string;
 };
 
 export type Round = {
