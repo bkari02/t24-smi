@@ -1,0 +1,39 @@
+create or replace function public.t24_start_member_session(
+  p_event_id text,
+  p_participant_id text,
+  p_login_code text
+)
+returns table (session_id uuid, session_token text, expires_at timestamptz, participant_id text)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  code_row public.member_login_codes;
+  raw_token text;
+  session_expiry timestamptz := now() + interval '30 minutes';
+begin
+  select codes.* into code_row
+  from public.member_login_codes as codes
+  where codes.event_id = p_event_id
+    and codes.participant_id = p_participant_id
+    and codes.code_hash = encode(extensions.digest(p_login_code, 'sha256'), 'hex')
+    and codes.expires_at > now()
+  for update;
+  if code_row.event_id is null then raise exception 'Invalid or expired login code'; end if;
+  if not exists (
+    select 1
+    from public.team_members as members
+    where members.event_id = p_event_id
+      and members.participant_id = p_participant_id
+  ) then raise exception 'Unknown participant'; end if;
+
+  raw_token := encode(extensions.gen_random_bytes(32), 'hex');
+  return query
+    insert into public.member_sessions as sessions(event_id, participant_id, token_hash, expires_at)
+    values (
+      p_event_id,
+      p_participant_id,
+      encode(extensions.digest(raw_token, 'sha256'), 'hex'),
+      session_expiry
+    )
+    returning sessions.id, raw_token, session_expiry, sessions.participant_id;
+end $$;

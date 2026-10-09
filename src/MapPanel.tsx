@@ -40,6 +40,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       .addTo(instance);
     updateStartMarkerStyles(phase);
     map.current = instance;
+    let disposed = false;
     const courses: { phase: Phase; file: string; color: string }[] = [
       { phase: 'Bike', file: 'bike.gpx', color: '#f26b4f' },
       { phase: 'Run', file: 'run.gpx', color: '#91a7ff' },
@@ -51,6 +52,7 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
           return response.text();
         })
         .then((gpx) => {
+          if (disposed) return;
           const document = new DOMParser().parseFromString(gpx, 'application/xml');
           const points = [...document.querySelectorAll('trkpt')]
             .map((point) => {
@@ -62,12 +64,15 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
             })
             .filter((point): point is L.LatLngExpression => point !== undefined);
           if (points.length < 2) throw new Error(`${file} contains fewer than two valid track points`);
-          routeLayers.current[coursePhase] = L.polyline(points, {
+          const route = L.polyline(points, {
             color, weight: 4, opacity: 0.85,
-          }).addTo(instance);
-          startMarkers.current[coursePhase] = L.circleMarker(points[0])
+          });
+          const startMarker = L.circleMarker(points[0])
             .bindTooltip(`${coursePhase} start / handover`)
-            .addTo(instance);
+          routeLayers.current[coursePhase] = route;
+          startMarkers.current[coursePhase] = startMarker;
+          route.addTo(instance);
+          startMarker.addTo(instance);
           updateStartMarkerStyles(phase);
           updateRouteStyles(phase);
         })
@@ -76,7 +81,12 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
         });
     });
     return () => {
+      disposed = true;
       instance.remove();
+      if (map.current === instance) map.current = undefined;
+      routeLayers.current = {};
+      startMarkers.current = {};
+      markers.current = {};
     };
   }, []);
 

@@ -15,6 +15,80 @@ export const supabase = url && anonKey
     })
   : null;
 
+export type MemberSession = {
+  sessionId: string;
+  sessionToken: string;
+  expiresAt: string;
+  participantId: string;
+};
+
+export type CheerTotal = { participantId: string; total: number };
+
+function memberClient() {
+  if (!url || !anonKey) throw new Error('Supabase is not configured');
+  const token = sessionStorage.getItem('t24-member-session');
+  return createClient(url, anonKey, {
+    global: { headers: {
+      ...(import.meta.env.VITE_T24_EVENT_TOKEN ? { 'x-t24-event-token': import.meta.env.VITE_T24_EVENT_TOKEN } : {}),
+      ...(token ? { 'x-t24-member-session': token } : {}),
+    } },
+  });
+}
+
+export async function startMemberSession(loginCode: string): Promise<MemberSession> {
+  const { data: rawData, error } = await requireSupabase().rpc('t24_start_member_session', {
+    p_event_id: eventId, p_participant_id: 'p1', p_login_code: loginCode,
+  }).single();
+  if (error) throw error;
+  const data = rawData as {
+    session_id: string; session_token: string; expires_at: string; participant_id: string;
+  };
+  const session = {
+    sessionId: data.session_id, sessionToken: data.session_token,
+    expiresAt: data.expires_at, participantId: data.participant_id,
+  };
+  sessionStorage.setItem('t24-member-session', session.sessionToken);
+  return session;
+}
+
+export function clearMemberSession() {
+  sessionStorage.removeItem('t24-member-session');
+}
+
+export async function recordViewerHeartbeat(viewerSessionId: string, participantId?: string) {
+  const { data, error } = await memberClient().rpc('t24_record_viewer_heartbeat', {
+    p_event_id: eventId, p_session_id: viewerSessionId, p_participant_id: participantId ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function loadActiveViewerCount() {
+  const { data, error } = await memberClient().rpc('t24_active_viewer_count', { p_event_id: eventId });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+export async function recordCheer(participantId: string, clientNonce: string) {
+  const { data, error } = await memberClient().rpc('t24_record_cheer', {
+    p_event_id: eventId, p_participant_id: participantId, p_client_nonce: clientNonce,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function loadCheerTotals(): Promise<CheerTotal[]> {
+  const { data, error } = await memberClient().rpc('t24_cheer_totals', { p_event_id: eventId });
+  if (error) throw error;
+  return ((data ?? []) as { participant_id: string; total: number }[]).map((row) => ({
+    participantId: row.participant_id, total: Number(row.total),
+  }));
+}
+
+export function hasMemberSession() {
+  return Boolean(sessionStorage.getItem('t24-member-session'));
+}
+
 type LocationRow = {
   participant_id: string;
   latitude: number;

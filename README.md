@@ -18,6 +18,8 @@ The dashboard tracks the active participant, next handover, round times, phase c
 - Manual and automatic location refresh every 30 seconds
 - Clickable participant rows for map focus
 - Editable per-participant pace estimates in [`public/data/pace-estimates.csv`](./public/data/pace-estimates.csv)
+- Fan, team-member, and athlete views
+- Viewer presence estimate and cheers
 
 ## Run locally
 
@@ -79,6 +81,21 @@ insert into public.team_members(event_id, participant_id, name, color, sort_orde
 ('YOUR_EVENT_ID', 'p5', 'Benni', '#d28cff', 5);
 ```
 
+9. Apply [`supabase/migrations/20261009120000_add_member_presence_cheers.sql`](./supabase/migrations/20261009120000_add_member_presence_cheers.sql).
+10. Provision the shared team password as a SHA-256 digest. The current frontend uses `p1` as the shared team login identity:
+
+```sql
+insert into public.member_login_codes(event_id, participant_id, code_hash, expires_at)
+values (
+  'YOUR_EVENT_ID',
+  'p1',
+  encode(digest('CHOOSE_A_SHARED_TEAM_PASSWORD', 'sha256'), 'hex'),
+  now() + interval '365 days'
+);
+```
+
+The password is a presentation-level access gate, not a security boundary. The fan view does not show race-control controls; do not treat the bundled frontend event token as a secret.
+
 8. In **Project Settings → API**, copy:
    - Project URL
    - Project anon/public key
@@ -111,6 +128,30 @@ The migration enables Row Level Security. Only requests carrying the matching `x
 The `VITE_` values are bundled into the browser application. The anon key is designed to be public, but the event token should still be treated as private and rotated after the event. Never put a Supabase `service_role` key in Netlify frontend variables, OwnTracks, or source code.
 
 The repository's [`netlify.toml`](./netlify.toml) tells Netlify's secret scanner to ignore the event ID and frontend event token because Vite must bundle them for this prototype. This is a deployment workaround, not strong security: anyone who can load the site can inspect those values. For a stronger setup, remove `VITE_T24_EVENT_TOKEN` from the frontend and use the protected OwnTracks/Supabase Edge Function design described below.
+
+### View modes
+
+The public default is the fan view:
+
+```text
+https://your-site.example/
+```
+
+Team members can use the shared password to unlock controls, or open:
+
+```text
+https://your-site.example/?view=member
+```
+
+Athletes can open a focused view for their participant:
+
+```text
+https://your-site.example/?view=athlete&participant=p1
+```
+
+The athlete view shows approximate GPX route progress, completed distance, and remaining distance. GPS position, route crossings, and sparse OwnTracks updates can make this estimate inaccurate.
+
+All views can send a cheer to the active athlete. Viewer counts are estimates based on browser heartbeats and can lag by several minutes.
 
 ### 4. Test the deployment
 

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import MapPanel from './MapPanel';
 import { EventState, Location, Phase, Round } from './types';
-import { eventId, loadLatestLocations, loadSharedState, mutateEvent, supabase } from './supabase';
+import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerTotals, loadLatestLocations, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, supabase } from './supabase';
+import { loadRouteProgress, RouteProgress } from './routeProgress';
 
 const phases: { name: Phase; duration: number; distance: string }[] = [
   { name: 'Swim', duration: 4, distance: '1 km' },
@@ -35,11 +36,30 @@ function formatDurationWithSeconds(seconds: number) {
   return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(remainder).padStart(2, '0')}s`;
 }
 
-function formatClock(iso?: string) {
-  return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+function formatClock(iso?: string, withSeconds = false) {
+  return iso
+    ? new Date(iso).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(withSeconds ? { second: '2-digit' } : {}),
+    })
+    : '--:--';
 }
 
 function App() {
+  const params = new URLSearchParams(window.location.search);
+  const requestedView: 'fan' | 'member' | 'athlete' = params.get('view') === 'member'
+    ? 'member'
+    : params.get('view') === 'athlete' ? 'athlete' : 'fan';
+  const [view, setView] = useState<'fan' | 'member' | 'athlete'>(requestedView);
+  const [memberAuthed, setMemberAuthed] = useState(hasMemberSession());
+  const [memberPassword, setMemberPassword] = useState('');
+  const [memberLoginError, setMemberLoginError] = useState('');
+  const [viewerCount, setViewerCount] = useState<number>();
+  const [cheers, setCheers] = useState<Record<string, number>>({});
+  const [cheerPending, setCheerPending] = useState(false);
+  const [routeProgress, setRouteProgress] = useState<RouteProgress>();
+  const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem('t24-theme') === 'dark');
   const [state, setState] = useState<EventState>(initialState);
   const [now, setNow] = useState(Date.now());
   const [syncMessage, setSyncMessage] = useState('');
@@ -52,7 +72,33 @@ function App() {
   const [paceError, setPaceError] = useState('');
 
   useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+    window.localStorage.setItem('t24-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const viewerId = window.localStorage.getItem('t24-viewer-id') ?? crypto.randomUUID();
+    window.localStorage.setItem('t24-viewer-id', viewerId);
+    const heartbeat = () => {
+      void recordViewerHeartbeat(viewerId, view === 'athlete' ? params.get('participant') ?? undefined : undefined)
+        .then(() => loadActiveViewerCount()).then(setViewerCount).catch(() => undefined);
+    };
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 180000);
+    return () => window.clearInterval(timer);
+  }, [view]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const refreshCheers = () => { void loadCheerTotals().then((rows) => setCheers(Object.fromEntries(rows.map((row) => [row.participantId, row.total])))).catch(() => undefined); };
+    refreshCheers();
+    const timer = window.setInterval(refreshCheers, 180000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -151,6 +197,8 @@ function App() {
 
   const active = state.members.find((member) => member.id === state.activeParticipantId) ?? state.members[0];
   const next = state.members.find((member) => member.id === state.nextParticipantId) ?? state.members[1];
+  const athleteId = view === 'athlete' ? params.get('participant') ?? active.id : active.id;
+  const athlete = state.members.find((member) => member.id === athleteId) ?? active;
   const activeRound = [...state.rounds].reverse().find((round) => round.participantId === active.id && !round.finishedAt);
   const completedRounds = state.rounds.filter((round) => round.finishedAt);
   const phaseConfig = phases.find((phase) => phase.name === state.phase)!;
@@ -204,6 +252,7 @@ function App() {
   }
 
   const activeLocation = state.locations[active.id];
+  const athleteLocation = state.locations[athlete.id];
   const locationAge = activeLocation ? Math.round((now - new Date(activeLocation.recordedAt).getTime()) / 1000) : undefined;
   const startLabel = activeRound ? `Round ${activeRound.number} in progress` : 'Start next round';
   const estimatedFinish = activeRound && typicalDuration
@@ -213,6 +262,30 @@ function App() {
     ? Math.max(0, (estimatedFinish.getTime() - now) / 1000)
     : undefined;
   const estimateSource = recentDurations.length ? 'recent phase laps' : 'CSV estimate';
+  const canControl = view === 'member' && memberAuthed;
+
+  useEffect(() => {
+    if (view !== 'athlete') return;
+    void loadRouteProgress(state.phase, athleteLocation).then(setRouteProgress).catch(() => setRouteProgress(undefined));
+  }, [view, state.phase, athleteLocation]);
+
+  function cheer() {
+    setCheerPending(true);
+    const nonce = crypto.randomUUID();
+    void recordCheer(active.id, nonce)
+      .then(() => loadCheerTotals())
+      .then((rows) => setCheers(Object.fromEntries(rows.map((row) => [row.participantId, row.total]))))
+      .catch((error: Error) => setSyncMessage(`Cheer failed: ${error.message}`))
+      .finally(() => setCheerPending(false));
+  }
+
+  function loginMember(event: FormEvent) {
+    event.preventDefault();
+    setMemberLoginError('');
+    void startMemberSession(memberPassword)
+      .then(() => { setMemberAuthed(true); setMemberPassword(''); })
+      .catch((error: Error) => setMemberLoginError(error.message));
+  }
 
   function focusParticipant(id: string) {
     setFocusedParticipantId(id);
@@ -222,12 +295,22 @@ function App() {
   return (
     <main>
       <header className="topbar">
-        <div><p className="eyebrow">T24 · TEAM DASHBOARD</p><h1>Keep moving.</h1></div>
-        <button className="quiet-button" onClick={reset}>Reset</button>
+        <div><p className="eyebrow">T24 · TEAM DASHBOARD</p><h2>Keep moving.</h2></div>
+        <div className="header-actions">
+          <button className="quiet-button" onClick={() => setView('fan')}>Fan</button>
+          <button className="quiet-button" onClick={() => setView('member')}>Team</button>
+          <button className="quiet-button" onClick={() => setView('athlete')}>Athlete</button>
+          <button className="quiet-button cheer-button" onClick={cheer} disabled={cheerPending || !supabase}>Cheer {active.name} · {cheers[active.id] ?? 0}</button>
+          <button className="quiet-button theme-toggle" onClick={() => setDarkMode((current) => !current)}>{darkMode ? 'Light mode' : 'Dark mode'}</button>
+          {canControl && <button className="quiet-button" onClick={reset}>Reset</button>}
+        </div>
       </header>
+      <div className="view-status"><span>{view === 'fan' ? 'Fan view' : view === 'member' ? 'Team member view' : `Athlete view · ${athlete.name}`}</span>{viewerCount !== undefined && <span>{viewerCount} active viewers</span>}</div>
+      {view === 'member' && !memberAuthed && <form className="member-login" onSubmit={loginMember}><div><p className="eyebrow">TEAM ACCESS</p><h2>Enter team password</h2></div><input type="password" value={memberPassword} onChange={(event) => setMemberPassword(event.target.value)} placeholder="Shared password" required /><button className="primary-button" type="submit">Unlock controls</button>{memberLoginError && <p className="sync-message">{memberLoginError}</p>}</form>}
       {sharedLoading && <p className="sync-message">Loading shared race state…</p>}
       {syncMessage && <p className="sync-message">{syncMessage}</p>}
       <>
+          <section className="panel map-panel map-priority"><div className="section-heading"><div><p className="eyebrow">LIVE MAP · PRIMARY VIEW</p><h2>{Object.keys(state.locations).length ? 'All participants' : 'Course preview'}</h2></div><div className="map-actions"><span className="map-live-indicator"><span className="member-dot" style={{ background: active.color }} />{active.name} · {state.phase}</span><button className="refresh-button" onClick={() => loadLatestLocations().then((locations) => { update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }); setLastLocationSync(new Date()); }).catch((error: Error) => setSyncMessage(`Location refresh failed: ${error.message}`))} disabled={locationSyncing}>{locationSyncing ? 'Refreshing…' : 'Refresh'}</button>{lastLocationSync && <span className="status">Updated {Math.max(0, Math.round((now - lastLocationSync.getTime()) / 1000))}s ago</span>}</div></div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} /></section>
           <section className="hero-grid">
             <div className="phase-card">
               <div className="section-heading"><div><p className="eyebrow">CURRENT PHASE</p><h2>{state.phase}</h2></div><span className="phase-dot" /></div>
@@ -238,26 +321,39 @@ function App() {
               <p className="eyebrow">ACTIVE NOW</p><h2>{active.name}</h2>
               <p className="active-time">{activeRound ? `${formatDurationWithSeconds(elapsed)} elapsed` : 'Waiting at transition'}</p>
               <div className="round-pill">{activeRound ? `Round ${activeRound.number}` : `Next: round ${phaseRounds.length + 1}`}</div>
-              {estimatedFinish && typicalDuration !== undefined && estimatedFinishIn !== undefined && <p className="estimate">Estimated finish {formatClock(estimatedFinish.toISOString())}<span className="estimate-countdown">in {formatDurationWithSeconds(estimatedFinishIn)}</span><small>Based on {estimateSource} · {formatDuration(typicalDuration)}</small></p>}
+              {estimatedFinish && typicalDuration !== undefined && estimatedFinishIn !== undefined && <p className="estimate">Estimated finish {formatClock(estimatedFinish.toISOString(), true)}<span className="estimate-countdown">in {formatDurationWithSeconds(estimatedFinishIn)}</span><small>Based on {estimateSource} · {formatDurationWithSeconds(typicalDuration)}</small></p>}
             </div>
           </section>
-          <section className="control-panel">
+          {view === 'athlete' && <section className="panel athlete-panel"><p className="eyebrow">YOUR TRACK POSITION</p><h2>{athlete.name}</h2><div className="athlete-stats"><strong>{routeProgress ? `${routeProgress.completedKm.toFixed(1)} km` : '—'}</strong><span>completed</span><strong>{routeProgress ? `${routeProgress.remainingKm.toFixed(1)} km` : '—'}</strong><span>remaining</span><strong>{routeProgress ? `${Math.round(routeProgress.percent)}%` : '—'}</strong><span>approx. progress</span></div><p className="muted">GPS route progress is approximate and based on the nearest course point.</p></section>}
+          {canControl && <section className="control-panel">
             <button className="primary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={activeRound ? finishRound : startRound}>{activeRound ? 'Finish round' : startLabel}</button>
             <div className="handover-row"><label htmlFor="next">Next up</label><select id="next" value={state.nextParticipantId} onChange={(event) => setNext(event.target.value)} disabled={mutationPending}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button className="secondary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={handover}>Handover to {next.name}</button></div>
             <div className="phase-switcher"><span>Phase</span>{phases.map((phase) => <button key={phase.name} className={state.phase === phase.name ? 'selected' : ''} disabled={mutationPending} onClick={() => void performMutation('change_phase', undefined, phase.name)}>{phase.name}</button>)}</div>
-          </section>
+          </section>}
           <section className="content-grid">
-            <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>Who is resting</h2></div><span className="muted">{completedRounds.length} rounds</span></div>
-              {state.members.map((member) => {
-                const lastRound = [...completedRounds].reverse().find((round) => round.participantId === member.id);
-                return <button className={`member-row ${focusedParticipantId === member.id ? 'focused' : ''}`} key={member.id} onClick={() => focusParticipant(member.id)}><span className="member-dot" style={{ background: member.color }} /><strong>{member.name}</strong><span className="member-stat">{member.id === active.id ? 'Active' : lastRound ? `Last ${formatClock(lastRound.finishedAt)}` : 'Ready'}</span>{member.id === next.id && <span className="next-tag">NEXT</span>}</button>;
-              })}
-              <div className="next-estimate"><span>Estimated next handover</span><strong>{activeRound && typicalDuration !== undefined ? formatClock(new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000).toISOString()) : '--:--'}</strong></div>
+            <div className="rotation-grid">
+              <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>Active & next</h2></div><span className="muted">{completedRounds.length} rounds</span></div>
+                <button className={`member-row featured ${focusedParticipantId === active.id ? 'focused' : ''}`} onClick={() => focusParticipant(active.id)}><span className="member-dot" style={{ background: active.color }} /><strong>{active.name}</strong><span className="member-stat">Active</span></button>
+                <button className={`member-row featured ${focusedParticipantId === next.id ? 'focused' : ''}`} onClick={() => focusParticipant(next.id)}><span className="member-dot" style={{ background: next.color }} /><strong>{next.name}</strong><span className="member-stat">Next up</span><span className="next-tag">NEXT</span></button>
+                <div className="next-estimate"><span>Estimated next handover</span><strong>{activeRound && typicalDuration !== undefined ? formatClock(new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000).toISOString(), true) : '--:--'}</strong></div>
+              </div>
+              <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>Resting order</h2></div><span className="muted">Longest rest first</span></div>
+                {state.members.filter((member) => member.id !== active.id && member.id !== next.id).sort((a, b) => {
+                  const lastA = [...completedRounds].reverse().find((round) => round.participantId === a.id)?.finishedAt;
+                  const lastB = [...completedRounds].reverse().find((round) => round.participantId === b.id)?.finishedAt;
+                  if (!lastA && !lastB) return 0;
+                  if (!lastA) return -1;
+                  if (!lastB) return 1;
+                  return new Date(lastA).getTime() - new Date(lastB).getTime();
+                }).map((member) => {
+                  const lastRound = [...completedRounds].reverse().find((round) => round.participantId === member.id);
+                  return <button className={`member-row ${focusedParticipantId === member.id ? 'focused' : ''}`} key={member.id} onClick={() => focusParticipant(member.id)}><span className="member-dot" style={{ background: member.color }} /><strong>{member.name}</strong><span className="member-stat">{lastRound ? `Last ${formatClock(lastRound.finishedAt)}` : 'Ready'}</span></button>;
+                })}
+              </div>
             </div>
-            <div className="panel map-panel"><div className="section-heading"><div><p className="eyebrow">LIVE MAP</p><h2>{Object.keys(state.locations).length ? 'All participants' : 'Course preview'}</h2></div><div className="map-actions"><button className="refresh-button" onClick={() => loadLatestLocations().then((locations) => { update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }); setLastLocationSync(new Date()); }).catch((error: Error) => setSyncMessage(`Location refresh failed: ${error.message}`))} disabled={locationSyncing}>{locationSyncing ? 'Refreshing…' : 'Refresh'}</button>{lastLocationSync && <span className="status">Updated {Math.max(0, Math.round((now - lastLocationSync.getTime()) / 1000))}s ago</span>}</div></div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} /></div>
           </section>
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>Latest rounds</h2></div><span className="muted">{phaseConfig.distance} per round</span></div>{paceError && <p className="sync-message">{paceError}</p>}
-            {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDuration(duration)}</b></div>; })}</div>}
+            {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>}
           </section>
         </>
       <footer><span>Shared race state · OwnTracks locations</span><span>Phase ETA uses the last 3 completed rounds</span></footer>
