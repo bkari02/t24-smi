@@ -1,5 +1,6 @@
 import { CSSProperties, FormEvent, useEffect, useRef, useState } from 'react';
 import MapPanel from './MapPanel';
+import EventChat from './EventChat';
 import { EventState, Location, Phase, Round } from './types';
 import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, loadCheerSummary, loadLatestLocations, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, supabase } from './supabase';
 import { loadRouteProgress, RouteProgress } from './routeProgress';
@@ -53,6 +54,31 @@ function formatClock(iso?: string, withSeconds = false) {
     : '--:--';
 }
 
+type ScheduleItem = {
+  phase: Phase;
+  loop: number;
+  participant: string;
+  start: string;
+  end: string;
+  duration: string;
+};
+
+function parseSchedule(csv: string): ScheduleItem[] {
+  return csv.trim().split(/\r?\n/).slice(1).map((row) => {
+    const [discipline, loop, participant, start, end, duration] = row.split(',').map((value) => value.trim());
+    const phase: Phase = discipline === 'Swimming' ? 'Swim' : discipline === 'Cycling' ? 'Bike' : 'Run';
+    return { phase, loop: Number(loop), participant, start: start.replace(' ', 'T'), end: end.replace(' ', 'T'), duration };
+  }).filter((item) => Number.isFinite(item.loop) && item.participant);
+}
+
+function scheduleClock(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function scheduleDate(iso: string) {
+  return new Date(iso).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
 function App() {
   const params = new URLSearchParams(window.location.search);
   const requestedView: 'fan' | 'member' | 'athlete' = params.get('view') === 'member'
@@ -84,6 +110,9 @@ function App() {
   const [locationSyncing, setLocationSyncing] = useState(false);
   const [paceEstimates, setPaceEstimates] = useState<Record<string, Partial<Record<Phase, number>>>>({});
   const [paceError, setPaceError] = useState('');
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [scheduleError, setScheduleError] = useState('');
+  const [schedulePage, setSchedulePage] = useState(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
@@ -182,6 +211,16 @@ function App() {
         setPaceEstimates(estimates);
       })
       .catch((error: Error) => setPaceError(error.message));
+  }, []);
+
+  useEffect(() => {
+    fetch('/data/schedule.csv')
+      .then((response) => {
+        if (!response.ok) throw new Error(`Could not load schedule (${response.status})`);
+        return response.text();
+      })
+      .then((csv) => setSchedule(parseSchedule(csv)))
+      .catch((error: Error) => setScheduleError(error.message));
   }, []);
 
   useEffect(() => {
@@ -301,6 +340,10 @@ function App() {
   const recentCheerScale = Math.min(1.55, 1 + activeRecentCheers * 0.09);
   const recentCheerTone = activeRecentCheers >= 10 ? 'hot' : activeRecentCheers >= 4 ? 'warm' : 'cool';
   const maxGraphValue = Math.max(1, ...cheerGraph.map((item) => item.total));
+  const schedulePageSize = 8;
+  const remainingSchedule = schedule.filter((item) => new Date(item.end).getTime() >= now);
+  const schedulePageCount = Math.max(1, Math.ceil(remainingSchedule.length / schedulePageSize));
+  const visibleSchedule = remainingSchedule.slice(schedulePage * schedulePageSize, (schedulePage + 1) * schedulePageSize);
 
   useEffect(() => {
     if (view !== 'athlete') return;
@@ -405,6 +448,8 @@ function App() {
               </div>
             </div>
           </section>
+          <EventChat />
+          <section className="panel planned-schedule"><div className="section-heading"><div><p className="eyebrow">PLANNED RELAY</p><h2>When to tune in</h2></div><span className="muted">Live controls can override this plan</span></div>{scheduleError && <p className="sync-message">{scheduleError}</p>}{remainingSchedule.length === 0 ? <p className="empty">No upcoming schedule entries.</p> : <><div className="planned-list">{visibleSchedule.map((item) => { const member = state.members.find((candidate) => candidate.name.toLowerCase() === item.participant.toLowerCase()); const isCurrent = item.phase === state.phase && item.participant.toLowerCase() === active.name.toLowerCase(); return <div className={`planned-row ${isCurrent ? 'current' : ''}`} key={`${item.phase}-${item.loop}`}><span className="planned-phase">{item.phase}</span><span className="planned-loop">#{item.loop}</span>{member?.imageUrl ? <img className="participant-avatar" src={member.imageUrl} alt="" /> : <span className="member-dot" style={{ background: member?.color ?? '#999' }} />}<strong>{item.participant}</strong><span className="planned-time">{scheduleDate(item.start)} · {scheduleClock(item.start)}–{scheduleClock(item.end)}</span><b>{item.duration}</b></div>; })}</div><div className="schedule-pagination"><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.max(0, page - 1))} disabled={schedulePage === 0}>Previous</button><span>Page {schedulePage + 1} / {schedulePageCount}</span><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.min(schedulePageCount - 1, page + 1))} disabled={schedulePage >= schedulePageCount - 1}>Next</button></div></>}</section>
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>Latest rounds</h2></div><span className="muted">{phaseConfig.distance} per round</span></div>{paceError && <p className="sync-message">{paceError}</p>}
             {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>}
           </section>

@@ -20,6 +20,7 @@ The dashboard tracks the active participant, next handover, round times, phase c
 - Editable per-participant pace estimates in [`public/data/pace-estimates.csv`](./public/data/pace-estimates.csv)
 - Fan, team-member, and athlete views
 - Viewer presence estimate and cheers
+- Minnit community chat above the planned schedule
 
 ## Run locally
 
@@ -152,6 +153,16 @@ https://your-site.example/?view=athlete&participant=p1
 The athlete view shows approximate GPX route progress, completed distance, and remaining distance. GPS position, route crossings, and sparse OwnTracks updates can make this estimate inaccurate.
 
 All views can send a cheer to the active athlete. Viewer counts are estimates based on browser heartbeats and can lag by several minutes.
+
+### Minnit event chat
+
+The dashboard embeds the team’s public Minnit room above the planned schedule in all views. Minnit handles chat identities, moderation, and message storage. The current room is configured in [`src/EventChat.tsx`](./src/EventChat.tsx). To override it for another environment, set:
+
+```text
+VITE_MINNIT_CHAT_URL=https://organizations.minnit.chat/your-chat-path?embed
+```
+
+The room’s generated Minnit embed script is loaded by the browser. Chat content is external to the dashboard and is subject to Minnit’s availability and policies.
 
 ### 4. Test the deployment
 
