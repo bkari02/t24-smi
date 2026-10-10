@@ -27,8 +27,14 @@ body { margin: 0; min-width: 320px; background: var(--canvas); color: var(--ink)
 button, select { font: inherit; }
 button { cursor: pointer; }
 main { max-width: 1280px; margin: 0 auto; padding: 22px 26px 18px; }
+.start-countdown-banner { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; border: 2px solid var(--ink); background: #f6c85f; color: #191919; padding: 10px 14px; box-shadow: 5px 5px 0 var(--ink); }
+.start-countdown-banner .eyebrow { margin: 0; color: #e7422e; }
+.start-countdown-banner strong { font-size: clamp(18px, 3vw, 28px); letter-spacing: -.04em; }
+.start-countdown-banner > span:last-child { font-size: 11px; font-weight: 900; text-transform: uppercase; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 24px; border-bottom: 3px solid var(--ink); }
 .header-actions { display: flex; gap: 8px; }
+.language-switcher { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 18px; color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.language-switcher select { border: 2px solid var(--ink); background: var(--canvas); color: var(--ink); padding: 7px 9px; font-size: 11px; font-weight: 900; }
 .mode-select { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .mode-select select { min-width: 112px; border: 2px solid var(--ink); background: var(--canvas); color: var(--ink); padding: 9px 10px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
 .view-status { display: flex; justify-content: space-between; margin-top: 10px; color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
@@ -88,6 +94,16 @@ h2 { margin-bottom: 0; font-size: clamp(22px, 3vw, 34px); font-weight: 900; lett
 @keyframes encouragement-pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.35) rotate(-12deg); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1.12) rotate(-4deg); } 35% { transform: translate(-50%, -50%) scale(.98) rotate(-4deg); } 78% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2) rotate(-4deg); } }
 @keyframes celebration-flash { 0%, 100% { opacity: 0; transform: scale(1); } 10% { opacity: 1; transform: scale(.98); } 28% { opacity: .7; transform: scale(1.01); } 60% { opacity: .35; } }
 @keyframes confetti-fall { 0% { opacity: 0; transform: translateY(0) rotate(0deg) scale(.5); } 8% { opacity: 1; transform: translateY(8vh) rotate(90deg) scale(1); } 100% { opacity: 0; transform: translateY(115vh) rotate(900deg) scale(.8); } }
+.event-intro-overlay { position: fixed; z-index: 2100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(23, 24, 23, .72); }
+.event-intro-dialog { position: relative; width: min(620px, 100%); border: 3px solid var(--ink); background: var(--panel); color: var(--ink); padding: clamp(22px, 5vw, 38px); box-shadow: 10px 10px 0 #f6c85f; }
+.event-intro-dialog h2 { max-width: 540px; margin-bottom: 20px; font-size: clamp(28px, 5vw, 48px); }
+.event-intro-dialog > p:not(.eyebrow) { max-width: 550px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.event-intro-close { position: absolute; top: 10px; right: 12px; width: 34px; height: 34px; border: 2px solid var(--ink); background: transparent; color: var(--ink); font-size: 26px; line-height: 1; }
+.event-intro-close:hover { background: var(--ink); color: var(--canvas); }
+.event-intro-time { font-weight: 900; color: var(--ink) !important; }
+.event-intro-checkbox { display: flex; align-items: center; gap: 8px; margin: 22px 0 16px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.event-intro-checkbox input { width: 16px; height: 16px; accent-color: #e7422e; }
+.event-intro-action { width: 100%; }
 .round-pill, .next-tag { display: inline-flex; border: 2px solid currentColor; border-radius: 0; background: transparent; color: inherit; padding: 6px 9px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
 .estimate { margin: 10px 0 0; color: #fff8e8; font-size: 14px; font-weight: 900; }
 .estimate-countdown { display: block; margin: 4px 0; color: #191919; font-size: 26px; letter-spacing: -.06em; }
@@ -121,6 +137,8 @@ select { min-width: 130px; border: 2px solid var(--canvas); border-radius: 0; ba
 .participant-avatar { width: 32px; height: 32px; flex: 0 0 32px; border: 2px solid var(--ink); border-radius: 50%; object-fit: cover; }
 .participant-map-marker { border: 3px solid var(--ink); border-radius: 50%; background: #ece9df; object-fit: cover; box-shadow: 2px 2px 0 rgba(25, 25, 25, .65); }
 .participant-map-marker.active { border-width: 4px; box-shadow: 0 0 0 3px #fff8e8, 2px 2px 0 rgba(25, 25, 25, .75); }
+.basecamp-map-marker { display: grid; place-items: center; border: 2px solid #191919; border-radius: 50%; background: #f6c85f; color: #191919; box-shadow: 2px 2px 0 rgba(25, 25, 25, .65); }
+.basecamp-map-marker svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
 .member-stat { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .next-tag { margin-left: 4px; border-color: #e7422e; color: #e7422e; font-size: 9px; }
 .next-estimate { display: flex; justify-content: space-between; gap: 10px; margin-top: 22px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
@@ -182,6 +200,8 @@ footer { display: flex; justify-content: space-between; padding-top: 4px; color:
   main { padding: 16px 14px 18px; }
   .topbar { padding-bottom: 18px; }
   .header-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .language-switcher { margin-bottom: 12px; }
+  .start-countdown-banner { align-items: flex-start; flex-direction: column; gap: 4px; }
   h1 { font-size: clamp(44px, 17vw, 86px); }
   .hero-grid { grid-template-columns: 1fr; }
   .rotation-grid { grid-template-columns: 1fr; }
@@ -204,5 +224,7 @@ footer { display: flex; justify-content: space-between; padding-top: 4px; color:
   .team-intro-hero { grid-template-columns: 1fr; gap: 18px; }
   .team-photo { min-height: 220px; max-height: 300px; }
   .profile-grid, .mission-copy ul { grid-template-columns: 1fr; }
+  .event-intro-overlay { padding: 14px; }
+  .event-intro-dialog { box-shadow: 6px 6px 0 #f6c85f; }
   footer { gap: 10px; flex-direction: column; }
 }

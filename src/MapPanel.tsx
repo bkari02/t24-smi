@@ -9,6 +9,7 @@ const swimRoute: L.LatLngExpression[] = [
   [43.11875, 6.361347], [43.11957, 6.361563], [43.12039, 6.36178],
   [43.12089, 6.361785], [43.12139, 6.36179],
 ];
+const basecamp: L.LatLngExpression = [43.121795, 6.359774];
 
 type Props = {
   locations: Record<string, Location>;
@@ -34,6 +35,15 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
     }).addTo(instance);
+    L.marker(basecamp, {
+      icon: L.divIcon({
+        className: 'basecamp-map-marker',
+        html: '<svg aria-hidden="true" viewBox="0 0 24 24" role="img"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>',
+        iconSize: [25, 25],
+        iconAnchor: [12.5, 12.5],
+      }),
+      zIndexOffset: 800,
+    }).bindTooltip('Team SMI Basecamp', { direction: 'top', offset: [0, -14] }).addTo(instance);
     routeLayers.current.Swim = L.polyline(swimRoute, {
       color: '#f6c85f', weight: 5, opacity: 0.9,
     }).addTo(instance);
