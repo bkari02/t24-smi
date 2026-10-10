@@ -211,7 +211,11 @@ footer { display: flex; justify-content: space-between; padding-top: 4px; color:
   .control-panel { box-shadow: 5px 5px 0 #e7422e; }
   .handover-row { flex-wrap: wrap; }
   .handover-row .secondary-button { flex: 1 1 100%; }
-  .map-actions { align-items: flex-end; flex-direction: column; }
+  .map-panel > .section-heading { flex-direction: column; }
+  .map-actions { width: 100%; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .map-live-indicator { min-width: 0; flex: 1 1 auto; white-space: normal; }
+  .map-actions .refresh-button { flex: 0 0 auto; }
+  .map-actions .status { flex: 0 0 100%; margin-left: 0; }
   .map-panel .map { height: 410px; }
   .member-login { grid-template-columns: 1fr; }
   .athlete-stats { grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }
