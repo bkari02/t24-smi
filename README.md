@@ -6,12 +6,12 @@ The dashboard tracks the active participant, next handover, round times, phase c
 
 ## Included
 
-- Swim, bike, and run race board
+- Replacement Run 1, bike, and Run 2 race board; the cancelled swim course remains visible on the map in grey
 - One-tap round start and finish
 - Next-participant selection and handover
 - Rolling handover estimate from recent rounds
 - Shared round history through Supabase
-- Swim course preview from `public/courses/swim.gpx`
+- Cancelled swim course preview from `public/courses/swim.gpx`
 - Leaflet/OpenStreetMap map
 - Supabase location storage and Realtime updates when configured
 - OwnTracks locations for all participants
@@ -72,7 +72,7 @@ values ('your-event-id', 'PASTE_A_LONG_RANDOM_TOKEN_HERE');
 
 ```sql
 insert into public.events(id, name, event_started_at, current_phase, active_participant_id, next_participant_id)
-values ('YOUR_EVENT_ID', 'T24 Team', now(), 'Swim', 'p1', 'p2');
+values ('YOUR_EVENT_ID', 'T24 Team', now(), 'Run 1', 'p1', 'p2');
 
 insert into public.team_members(event_id, participant_id, name, color, sort_order) values
 ('YOUR_EVENT_ID', 'p1', 'Kieeesch', '#f26b4f', 1),

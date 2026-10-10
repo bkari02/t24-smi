@@ -6,9 +6,9 @@ import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, load
 import { loadRouteProgress, RouteProgress } from './routeProgress';
 
 const phases: { name: Phase; duration: number; distance: string }[] = [
-  { name: 'Swim', duration: 4, distance: '1 km' },
+  { name: 'Run 1', duration: 4, distance: '2.5 km' },
   { name: 'Bike', duration: 12, distance: '21 km' },
-  { name: 'Run', duration: 8, distance: '4 km' },
+  { name: 'Run 2', duration: 8, distance: '4 km' },
 ];
 const colors = ['#f26b4f', '#4cc9a4', '#f6c85f', '#91a7ff', '#d28cff'];
 const participantImages: Record<string, string> = {
@@ -38,7 +38,7 @@ const participantProfilesEn: Record<string, { title: string; strength: string; w
 
 const initialState: EventState = {
   eventStartedAt: new Date().toISOString(),
-  phase: 'Swim',
+  phase: 'Run 1',
   activeParticipantId: 'p1',
   nextParticipantId: 'p2',
   members: ['Kieeesch', 'Lilli', 'Jule', 'Matze', 'Benni'].map((name, index) => ({
@@ -104,8 +104,8 @@ const translations = {
     nowActive: 'Now active:', refresh: 'Refresh', refreshing: 'Refreshing…', updated: 'Updated', currentPhase: 'CURRENT PHASE',
     rounds: 'rounds', total: 'total', activeNow: 'ACTIVE NOW', cheersLastHour: 'CHEERS OVER LAST HOUR', recentCheers: 'recent cheers',
     elapsed: 'elapsed', waitingTransition: 'Waiting at transition', nextRound: 'Next: round', estimatedFinish: 'Estimated finish',
-    basedOn: 'Based on', recentLaps: 'recent phase laps', csvEstimate: 'CSV estimate', yourTrack: 'YOUR TRACK POSITION',
-    startCountdown: 'COUNTDOWN TO START', startsIn: 'Starts in', officialStart: 'Official start today at 13:00',
+    basedOn: 'Based on', recentLaps: 'recent phase laps', csvEstimate: 'CSV estimate', yourTrack: 'YOUR TRACK POSITION', cancelledSwim: 'Swim cancelled · bad water quality',
+    startCountdown: 'COUNTDOWN TO START', startsIn: 'Starts in', officialStart: 'Official start today at 13:00', raceChange: 'Swimming cancelled — Run 1 (2.5 km) instead', raceNotice: 'Swimming has been cancelled due to water quality issues. Another 4 hours of running are planned instead.',
     completed: 'completed', remaining: 'remaining', approxProgress: 'approx. progress', gpsNote: 'GPS route progress is approximate and based on the nearest course point.',
     finishRound: 'Finish round', startNext: 'Start next round', nextUp: 'Next up', handover: 'Handover', teamAccess: 'TEAM ACCESS',
     enterPassword: 'Enter team password', sharedPassword: 'Shared password', unlock: 'Unlock controls', loading: 'Loading shared race state…',
@@ -128,8 +128,8 @@ const translations = {
     nowActive: 'Aktiv:', refresh: 'Aktualisieren', refreshing: 'Aktualisiere…', updated: 'Aktualisiert', currentPhase: 'AKTUELLE PHASE',
     rounds: 'Runden', total: 'gesamt', activeNow: 'JETZT AKTIV', cheersLastHour: 'CHEERS DER LETZTEN STUNDE', recentCheers: 'aktuelle Cheers',
     elapsed: 'vergangen', waitingTransition: 'Warten am Wechsel', nextRound: 'Nächste Runde', estimatedFinish: 'Voraussichtliches Ende',
-    basedOn: 'Basierend auf', recentLaps: 'aktuellen Runden', csvEstimate: 'CSV-Schätzung', yourTrack: 'DEINE STRECKENPOSITION',
-    startCountdown: 'COUNTDOWN BIS ZUM START', startsIn: 'Start in', officialStart: 'Offizieller Start heute um 13:00 Uhr',
+    basedOn: 'Basierend auf', recentLaps: 'aktuellen Runden', csvEstimate: 'CSV-Schätzung', yourTrack: 'DEINE STRECKENPOSITION', cancelledSwim: 'Schwimmen abgesagt · schlechte Wasserqualität',
+    startCountdown: 'COUNTDOWN BIS ZUM START', startsIn: 'Start in', officialStart: 'Offizieller Start heute um 13:00 Uhr', raceChange: 'Schwimmen abgesagt — stattdessen Run 1 (2,5 km)', raceNotice: 'Das Schwimmen wurde wegen Problemen mit der Wasserqualität abgesagt. Stattdessen sind weitere 4 Stunden Laufen geplant.',
     completed: 'absolviert', remaining: 'verbleibend', approxProgress: 'ca. Fortschritt', gpsNote: 'Der GPS-Fortschritt ist eine Näherung anhand des nächstgelegenen Streckenpunkts.',
     finishRound: 'Runde beenden', startNext: 'Nächste Runde starten', nextUp: 'Als Nächstes geplant', handover: 'Wechsel', teamAccess: 'TEAMZUGANG',
     enterPassword: 'Team-Passwort eingeben', sharedPassword: 'Gemeinsames Passwort', unlock: 'Steuerung freischalten', loading: 'Gemeinsamen Rennstatus laden…',
@@ -145,7 +145,7 @@ const translations = {
 function parseSchedule(csv: string): ScheduleItem[] {
   return csv.trim().split(/\r?\n/).slice(1).map((row) => {
     const [discipline, loop, participant, start, end, duration] = row.split(',').map((value) => value.trim());
-    const phase: Phase = discipline === 'Swimming' ? 'Swim' : discipline === 'Cycling' ? 'Bike' : 'Run';
+    const phase: Phase = discipline === 'Swimming' ? 'Run 1' : discipline === 'Cycling' ? 'Bike' : 'Run 2';
     return { phase, loop: Number(loop), participant, start: start.replace(' ', 'T'), end: end.replace(' ', 'T'), duration };
   }).filter((item) => Number.isFinite(item.loop) && item.participant);
 }
@@ -294,7 +294,7 @@ function App() {
           if (!id || [swim, bike, run].some((value) => !Number.isFinite(Number(value)) || Number(value) <= 0)) {
             throw new Error(`Invalid pace estimate on CSV row ${index + 2}`);
           }
-          estimates[id] = { Swim: Number(swim) * 60, Bike: Number(bike) * 60, Run: Number(run) * 60 };
+          estimates[id] = { 'Run 1': Number(swim) * 60, Bike: Number(bike) * 60, 'Run 2': Number(run) * 60 };
         });
         setPaceEstimates(estimates);
       })
@@ -483,8 +483,12 @@ function App() {
       {secondsUntilTodayStart > 0 && <div className="start-countdown-banner" role="status">
         <span className="eyebrow">{t('startCountdown')}</span>
         <strong>{t('startsIn')} {formatCountdown(secondsUntilTodayStart)}</strong>
-        <span>{t('officialStart')}</span>
+        <span>{t('officialStart')} · {t('raceChange')}</span>
       </div>}
+      <div className="race-change-banner" role="status">
+        <span className="eyebrow">{t('raceChange')}</span>
+        <strong>{t('raceNotice')}</strong>
+      </div>
       {showEventIntro && <div className="event-intro-overlay" role="presentation">
         <section className="event-intro-dialog" role="dialog" aria-modal="true" aria-labelledby="event-intro-title">
           <button className="event-intro-close" onClick={closeEventIntro} aria-label="Close">×</button>

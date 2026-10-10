@@ -1,4 +1,4 @@
-export type Phase = 'Swim' | 'Bike' | 'Run';
+export type Phase = 'Run 1' | 'Bike' | 'Run 2';
 
 export type TeamMember = {
   id: string;

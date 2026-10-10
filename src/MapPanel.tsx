@@ -27,6 +27,8 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
   const imageMarkerData = useRef<Record<string, { marker: L.Marker; imageUrl: string; active: boolean }>>({});
   const routeLayers = useRef<Partial<Record<Phase, L.Polyline>>>({});
   const startMarkers = useRef<Partial<Record<Phase, L.CircleMarker>>>({});
+  const cancelledSwimLayer = useRef<L.Polyline>();
+  const cancelledSwimStartMarker = useRef<L.CircleMarker>();
 
   useEffect(() => {
     if (!element.current || map.current) return;
@@ -44,11 +46,11 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       }),
       zIndexOffset: 800,
     }).bindTooltip('Team SMI Basecamp', { direction: 'top', offset: [0, -14] }).addTo(instance);
-    routeLayers.current.Swim = L.polyline(swimRoute, {
-      color: '#f6c85f', weight: 5, opacity: 0.9,
+    cancelledSwimLayer.current = L.polyline(swimRoute, {
+      color: '#8c8c8c', weight: 5, opacity: 0.45, dashArray: '8 8',
     }).addTo(instance);
-    startMarkers.current.Swim = L.circleMarker(swimRoute[0])
-      .bindTooltip('Swim start / handover')
+    cancelledSwimStartMarker.current = L.circleMarker(swimRoute[0])
+      .bindTooltip('Cancelled swim course')
       .addTo(instance);
     updateStartMarkerStyles(phase);
     map.current = instance;
@@ -56,8 +58,9 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     instance.on('zoomend', () => updateImageMarkerSizes(instance.getZoom()));
     let disposed = false;
     const courses: { phase: Phase; file: string; color: string }[] = [
+      { phase: 'Run 1', file: 'run2_5km.gpx', color: '#ff1493' },
       { phase: 'Bike', file: 'bike.gpx', color: '#f26b4f' },
-      { phase: 'Run', file: 'run.gpx', color: '#91a7ff' },
+      { phase: 'Run 2', file: 'run.gpx', color: '#91a7ff' },
     ];
     courses.forEach(({ phase: coursePhase, file, color }) => {
       void fetch(`/courses/${file}`)
@@ -67,8 +70,15 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
         })
         .then((gpx) => {
           if (disposed) return;
-          const document = new DOMParser().parseFromString(gpx, 'application/xml');
-          const points = [...document.querySelectorAll('trkpt')]
+          const document = new DOMParser().parseFromString(gpx.trimStart(), 'application/xml');
+          if (document.querySelector('parsererror')) {
+            throw new Error(`${file} contains invalid GPX XML`);
+          }
+          const namespacedTrackPoints = [...document.getElementsByTagNameNS('*', 'trkpt')];
+          const trackPoints = namespacedTrackPoints.length > 0
+            ? namespacedTrackPoints
+            : [...document.querySelectorAll('trkpt')];
+          const points = trackPoints
             .map((point) => {
               const lat = Number(point.getAttribute('lat'));
               const lon = Number(point.getAttribute('lon'));
@@ -79,13 +89,15 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
             .filter((point): point is L.LatLngExpression => point !== undefined);
           if (points.length < 2) throw new Error(`${file} contains fewer than two valid track points`);
           const route = L.polyline(points, {
-            color, weight: 4, opacity: 0.85,
+            color, weight: coursePhase === 'Run 1' ? 7 : 4,
+            opacity: coursePhase === 'Run 1' ? 1 : 0.85,
           });
           const startMarker = L.circleMarker(points[0])
-            .bindTooltip(`${coursePhase} start / handover`)
+            .bindTooltip(`${coursePhase} start / handover`, { permanent: coursePhase === 'Run 1', direction: 'top' })
           routeLayers.current[coursePhase] = route;
           startMarkers.current[coursePhase] = startMarker;
           route.addTo(instance);
+          if (coursePhase === 'Run 1') route.bringToFront();
           startMarker.addTo(instance);
           updateStartMarkerStyles(phase);
           updateRouteStyles(phase);
@@ -100,6 +112,8 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
       if (map.current === instance) map.current = undefined;
       routeLayers.current = {};
       startMarkers.current = {};
+      cancelledSwimLayer.current = undefined;
+      cancelledSwimStartMarker.current = undefined;
       markers.current = {};
       imageMarkerData.current = {};
     };
@@ -107,29 +121,42 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
 
   function updateRouteStyles(currentPhase: Phase) {
     const colors: Record<Phase, string> = {
-      Swim: '#f6c85f',
+      'Run 1': '#ff1493',
       Bike: '#f26b4f',
-      Run: '#91a7ff',
+      'Run 2': '#91a7ff',
     };
     Object.entries(routeLayers.current).forEach(([routePhase, layer]) => {
       if (!layer) return;
+      if (routePhase === 'Run 1') {
+        layer.setStyle({ color: '#ff1493', opacity: 1, weight: 7, dashArray: undefined });
+        layer.bringToFront();
+        return;
+      }
       const isCurrent = routePhase === currentPhase;
       layer.setStyle({
         color: isCurrent ? colors[routePhase as Phase] : '#87958f',
         opacity: isCurrent ? 0.9 : 0.35,
         weight: isCurrent ? 5 : 3,
+        dashArray: undefined,
       });
     });
+    cancelledSwimLayer.current?.setStyle({ color: '#8c8c8c', opacity: 0.45, weight: 5, dashArray: '8 8' });
   }
 
   function updateStartMarkerStyles(currentPhase: Phase) {
     const colors: Record<Phase, string> = {
-      Swim: '#f6c85f',
+      'Run 1': '#ff1493',
       Bike: '#f26b4f',
-      Run: '#91a7ff',
+      'Run 2': '#91a7ff',
     };
     Object.entries(startMarkers.current).forEach(([markerPhase, marker]) => {
       if (!marker) return;
+      if (markerPhase === 'Run 1') {
+        marker.setStyle({
+          radius: 11, color: '#191919', weight: 3, fillColor: '#ff1493', fillOpacity: 1,
+        });
+        return;
+      }
       const isCurrent = markerPhase === currentPhase;
       marker.setStyle({
         radius: isCurrent ? 8 : 6,
@@ -138,6 +165,9 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
         fillColor: isCurrent ? colors[markerPhase as Phase] : '#a5b0ab',
         fillOpacity: isCurrent ? 1 : 0.55,
       });
+    });
+    cancelledSwimStartMarker.current?.setStyle({
+      radius: 6, color: '#6d7b76', weight: 1, fillColor: '#a5b0ab', fillOpacity: 0.55,
     });
   }
 

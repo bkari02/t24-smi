@@ -31,6 +31,9 @@ main { max-width: 1280px; margin: 0 auto; padding: 22px 26px 18px; }
 .start-countdown-banner .eyebrow { margin: 0; color: #e7422e; }
 .start-countdown-banner strong { font-size: clamp(18px, 3vw, 28px); letter-spacing: -.04em; }
 .start-countdown-banner > span:last-child { font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.race-change-banner { display: flex; align-items: baseline; gap: 16px; margin: -8px 0 18px; border: 2px solid var(--ink); background: #e8f1ed; color: var(--ink); padding: 10px 14px; box-shadow: 5px 5px 0 var(--ink); }
+.race-change-banner .eyebrow { flex: 0 0 auto; margin: 0; color: #e7422e; }
+.race-change-banner strong { font-size: 14px; line-height: 1.35; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 24px; border-bottom: 3px solid var(--ink); }
 .header-actions { display: flex; gap: 8px; }
 .language-switcher { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 18px; color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
@@ -202,6 +205,7 @@ footer { display: flex; justify-content: space-between; padding-top: 4px; color:
   .header-actions { flex-wrap: wrap; justify-content: flex-end; }
   .language-switcher { margin-bottom: 12px; }
   .start-countdown-banner { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .race-change-banner { align-items: flex-start; flex-direction: column; gap: 4px; margin-top: -8px; }
   h1 { font-size: clamp(44px, 17vw, 86px); }
   .hero-grid { grid-template-columns: 1fr; }
   .rotation-grid { grid-template-columns: 1fr; }
