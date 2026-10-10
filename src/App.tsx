@@ -3,7 +3,7 @@ import MapPanel from './MapPanel';
 import EventChat from './EventChat';
 import ElevationProfile from './ElevationProfile';
 import { EventState, Location, Phase, Round } from './types';
-import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, loadCheerSummary, loadCheerTimeline, loadLatestLocations, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, supabase } from './supabase';
+import { answerAthleteQuestion, AthleteQuestion, eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, loadCheerSummary, loadCheerTimeline, loadLatestLocations, loadPendingAthleteQuestions, loadPublishedAthleteQuestions, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, submitAthleteQuestion, supabase } from './supabase';
 import { loadRouteProgress, RouteProgress } from './routeProgress';
 
 const phases: { name: Phase; duration: number; distance: string }[] = [
@@ -98,7 +98,7 @@ const translations = {
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Reset',
     fanView: 'Fan view', memberView: 'Team member view', athleteView: 'Athlete view',
     activeViewers: 'active viewers', elevationProfile: 'ELEVATION PROFILE', ascent: 'Ascent', lowest: 'Lowest', highest: 'Highest', lapDistance: 'Lap', onCourse: 'active athlete', totalDistance: 'covered by the team', welcome: 'WELCOME TO TEAM SMI', introTitle: '24 hours, three disciplines, one active team member',
-    athleteAccess: 'ATHLETE ACCESS', chooseAthlete: 'Choose athlete', athletePassword: 'Password', athleteUnlock: 'Open athlete view', athletePasswordHint: 'Enter password', athleteLoginError: 'Wrong athlete password.', athleteCheers: 'YOUR CHEERS', cheersTotal: 'total cheers', cheerTimeline: 'CHEERS OVER TIME', noCheers: 'No cheers yet.',
+    athleteAccess: 'ATHLETE ACCESS', chooseAthlete: 'Choose athlete', athletePassword: 'Password', athleteUnlock: 'Open athlete view', athletePasswordHint: 'Enter password', athleteLoginError: 'Wrong athlete password.', athleteCheers: 'YOUR CHEERS', cheersTotal: 'total cheers', cheerTimeline: 'CHEERS OVER TIME', noCheers: 'No cheers yet.', askAthlete: 'ASK THE ATHLETE', askQuestion: 'Ask the active athlete', askerName: 'Your name', question: 'Question', sendQuestion: 'Send question', questionSent: 'Question sent — athlete will see it soon. Maybe it will appear on the blackboard soon.', questionsWaiting: 'QUESTIONS WAITING', answerQuestion: 'Answer question', answer: 'Answer', publishAnswer: 'Publish answer', blackboard: 'ATHLETE BLACKBOARD', noQuestions: 'No answered questions yet.',
     introP1: 'We are starting as a team of five in a 24-hour relay triathlon: first 4 hours of swimming, then 12 hours of cycling, and finally 8 hours of running.',
     introP2: 'Only one person is racing at a time. Follow us during the event, join the chat, and send us cheers. Click the “Cheer for ...” button to cheer.',
     officialTime: 'Official start: Saturday, 13:00 · Finish: Sunday, 13:00', dontShow: 'Do not show again',
@@ -123,7 +123,7 @@ const translations = {
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Zurücksetzen',
     fanView: 'Fan-Ansicht', memberView: 'Teammitglied-Ansicht', athleteView: 'Athlet:innen-Ansicht',
     activeViewers: 'aktive Zuschauer:innen', elevationProfile: 'HÖHENPROFIL', ascent: 'Anstieg', lowest: 'Tiefster Punkt', highest: 'Höchster Punkt', lapDistance: 'Runde', onCourse: 'aktive:r Athlet:in', totalDistance: 'vom Team zurückgelegt', welcome: 'WILLKOMMEN BEI TEAM SMI', introTitle: '24 Stunden, drei Disziplinen, ein aktives Teammitglied',
-    athleteAccess: 'ATHLETEN-ZUGANG', chooseAthlete: 'Athlet:in auswählen', athletePassword: 'Passwort', athleteUnlock: 'Athleten-Ansicht öffnen', athletePasswordHint: 'Passwort eingeben', athleteLoginError: 'Falsches Athleten-Passwort.', athleteCheers: 'DEINE CHEERS', cheersTotal: 'Cheers gesamt', cheerTimeline: 'CHEERS IM ZEITVERLAUF', noCheers: 'Noch keine Cheers.',
+    athleteAccess: 'ATHLETEN-ZUGANG', chooseAthlete: 'Athlet:in auswählen', athletePassword: 'Passwort', athleteUnlock: 'Athleten-Ansicht öffnen', athletePasswordHint: 'Passwort eingeben', athleteLoginError: 'Falsches Athleten-Passwort.', athleteCheers: 'DEINE CHEERS', cheersTotal: 'Cheers gesamt', cheerTimeline: 'CHEERS IM ZEITVERLAUF', noCheers: 'Noch keine Cheers.', askAthlete: 'ASK THE ATHLETE', askQuestion: 'Aktive:n Athlet:in fragen', askerName: 'Dein Name', question: 'Frage', sendQuestion: 'Frage senden', questionSent: 'Frage gesendet — Athlet sieht sie bald. Vielleicht erscheint sie bald auf dem Blackboard.', questionsWaiting: 'OFFENE FRAGEN', answerQuestion: 'Frage beantworten', answer: 'Antwort', publishAnswer: 'Antwort veröffentlichen', blackboard: 'ATHLETEN-BLACKBOARD', noQuestions: 'Noch keine beantworteten Fragen.',
     introP1: 'Wir starten zu fünft bei einem 24-Stunden-Staffel-Triathlon: zuerst 4 Stunden Schwimmen, danach 12 Stunden Radfahren und zum Schluss 8 Stunden Laufen.',
     introP2: 'Es ist immer nur eine Person gleichzeitig im Rennen. Hier könnt ihr uns verfolgen, im Chat mitfiebern und uns anfeuern. Klickt dafür auf den „Cheer for ...“-Button.',
     officialTime: 'Offizieller Start: Samstag, 13:00 Uhr · Ende: Sonntag, 13:00 Uhr', dontShow: 'Nicht mehr anzeigen',
@@ -186,6 +186,13 @@ function App() {
   const [recentCheers, setRecentCheers] = useState<Record<string, number>>({});
   const [cheerGraph, setCheerGraph] = useState<{ bucket: string; total: number }[]>([]);
   const [athleteCheerTimeline, setAthleteCheerTimeline] = useState<{ bucket: string; total: number }[]>([]);
+  const [publishedQuestions, setPublishedQuestions] = useState<AthleteQuestion[]>([]);
+  const [pendingQuestions, setPendingQuestions] = useState<AthleteQuestion[]>([]);
+  const [askerName, setAskerName] = useState('');
+  const [questionText, setQuestionText] = useState('');
+  const [questionMessage, setQuestionMessage] = useState('');
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [questionPending, setQuestionPending] = useState(false);
   const [cheerBurst, setCheerBurst] = useState(0);
   const [cheerCelebration, setCheerCelebration] = useState(false);
   const [celebrationLevel, setCelebrationLevel] = useState(1);
@@ -471,6 +478,19 @@ function App() {
     void loadCheerTimeline(athleteId).then(setAthleteCheerTimeline).catch((error: Error) => setSyncMessage(`Cheer history unavailable: ${error.message}`));
   }, [view, athleteAuthed, athleteId]);
 
+  useEffect(() => {
+    if (!supabase) return;
+    const refreshQuestions = () => {
+      void loadPublishedAthleteQuestions().then(setPublishedQuestions).catch(() => undefined);
+      if (view === 'athlete' && athleteAuthed) {
+        void loadPendingAthleteQuestions(athleteId).then(setPendingQuestions).catch(() => undefined);
+      }
+    };
+    refreshQuestions();
+    const timer = window.setInterval(refreshQuestions, 30000);
+    return () => window.clearInterval(timer);
+  }, [view, athleteAuthed, athleteId, state.activeParticipantId]);
+
   function cheer() {
     setCheerPending(true);
     const nonce = crypto.randomUUID();
@@ -509,6 +529,35 @@ function App() {
     }
     setAthleteAuthed(true);
     setAthletePassword('');
+  }
+
+  function askAthlete(event: FormEvent) {
+    event.preventDefault();
+    setQuestionPending(true);
+    setQuestionMessage('');
+    void submitAthleteQuestion(active.id, askerName, questionText)
+      .then(() => {
+        setAskerName('');
+        setQuestionText('');
+        setQuestionMessage(t('questionSent'));
+      })
+      .catch((error: Error) => setQuestionMessage(error.message))
+      .finally(() => setQuestionPending(false));
+  }
+
+  function publishAnswer(question: AthleteQuestion) {
+    const answer = answerDrafts[question.id]?.trim();
+    if (!answer) return;
+    setQuestionPending(true);
+    void answerAthleteQuestion(question.id, athlete.id, answer)
+      .then(() => {
+        setPendingQuestions((current) => current.filter((item) => item.id !== question.id));
+        setAnswerDrafts((current) => { const next = { ...current }; delete next[question.id]; return next; });
+        return loadPublishedAthleteQuestions();
+      })
+      .then(setPublishedQuestions)
+      .catch((error: Error) => setSyncMessage(`Answer failed: ${error.message}`))
+      .finally(() => setQuestionPending(false));
   }
 
   function focusParticipant(id: string) {
@@ -586,12 +635,21 @@ function App() {
               {estimatedFinish && typicalDuration !== undefined && estimatedFinishIn !== undefined && <p className="estimate">{t('estimatedFinish')} {formatClock(estimatedFinish.toISOString(), true)}<span className="estimate-countdown">in {formatDurationWithSeconds(estimatedFinishIn)}</span><small>{t('basedOn')} · {estimateSource === 'CSV estimate' ? t('csvEstimate') : t('recentLaps')} · {formatDurationWithSeconds(typicalDuration)}</small></p>}
             </div>
           </section>
-          {athleteAccess && <><section className="panel athlete-panel"><p className="eyebrow">{t('yourTrack')}</p><h2>{athlete.name}</h2><div className="athlete-stats"><strong>{routeProgress ? `${routeProgress.completedKm.toFixed(1)} km` : '—'}</strong><span>{t('completed')}</span><strong>{routeProgress ? `${routeProgress.remainingKm.toFixed(1)} km` : '—'}</strong><span>{t('remaining')}</span><strong>{routeProgress ? `${Math.round(routeProgress.percent)}%` : '—'}</strong><span>{t('approxProgress')}</span></div><p className="muted">{t('gpsNote')}</p></section><section className="panel athlete-cheers"><div className="section-heading"><div><p className="eyebrow">{t('athleteCheers')}</p><h2>{athlete.name}</h2></div><strong className="athlete-cheer-total">{cheers[athlete.id] ?? 0} {t('cheersTotal')}</strong></div>{athleteCheerTimeline.length === 0 ? <p className="empty">{t('noCheers')}</p> : <><p className="eyebrow">{t('cheerTimeline')}</p><div className="athlete-cheer-chart">{athleteCheerTimeline.map((item) => <div className="athlete-cheer-bar" key={item.bucket} title={`${formatClock(item.bucket)} · ${item.total}`}><i style={{ height: `${Math.max(8, (item.total / maxAthleteCheer) * 100)}%` }} /><span>{formatClock(item.bucket)}</span></div>)}</div></>}</section></>}
+          {athleteAccess && <><section className="panel athlete-panel"><p className="eyebrow">{t('yourTrack')}</p><h2>{athlete.name}</h2><div className="athlete-stats"><strong>{routeProgress ? `${routeProgress.completedKm.toFixed(1)} km` : '—'}</strong><span>{t('completed')}</span><strong>{routeProgress ? `${routeProgress.remainingKm.toFixed(1)} km` : '—'}</strong><span>{t('remaining')}</span><strong>{routeProgress ? `${Math.round(routeProgress.percent)}%` : '—'}</strong><span>{t('approxProgress')}</span></div><p className="muted">{t('gpsNote')}</p></section><section className="panel athlete-questions"><div className="section-heading"><div><p className="eyebrow">{t('questionsWaiting')}</p><h2>{t('answerQuestion')}</h2></div><span className="muted">{pendingQuestions.length}</span></div>{pendingQuestions.length === 0 ? <p className="empty">{t('noQuestions')}</p> : pendingQuestions.map((item) => <article className="athlete-question" key={item.id}><p><strong>{item.askerName}</strong> · {item.question}</p><textarea value={answerDrafts[item.id] ?? ''} onChange={(event) => setAnswerDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder={t('answer')} maxLength={500} /><button className="refresh-button" disabled={questionPending || !answerDrafts[item.id]?.trim()} onClick={() => publishAnswer(item)}>{t('publishAnswer')}</button></article>)}</section><section className="panel athlete-cheers"><div className="section-heading"><div><p className="eyebrow">{t('athleteCheers')}</p><h2>{athlete.name}</h2></div><strong className="athlete-cheer-total">{cheers[athlete.id] ?? 0} {t('cheersTotal')}</strong></div>{athleteCheerTimeline.length === 0 ? <p className="empty">{t('noCheers')}</p> : <><p className="eyebrow">{t('cheerTimeline')}</p><div className="athlete-cheer-chart">{athleteCheerTimeline.map((item) => <div className="athlete-cheer-bar" key={item.bucket} title={`${formatClock(item.bucket)} · ${item.total}`}><i style={{ height: `${Math.max(8, (item.total / maxAthleteCheer) * 100)}%` }} /><span>{formatClock(item.bucket)}</span></div>)}</div></>}</section></>}
           {canControl && <section className="control-panel">
             <button className="primary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={activeRound ? finishRound : startRound}>{activeRound ? t('finishRound') : t('startNext')}</button>
             <div className="handover-row"><label htmlFor="next">{t('nextUp')}</label><select id="next" value={state.nextParticipantId} onChange={(event) => setNext(event.target.value)} disabled={mutationPending}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button className="secondary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={handover}>{t('handover')} {next.name}</button></div>
             <div className="phase-switcher"><span>Phase</span>{phases.map((phase) => <button key={phase.name} className={state.phase === phase.name ? 'selected' : ''} disabled={mutationPending} onClick={() => void performMutation('change_phase', undefined, phase.name)}>{phase.name}</button>)}</div>
           </section>}
+          <section className="panel ask-athlete-panel">
+            <div className="section-heading"><div><p className="eyebrow">{t('askAthlete')}</p><h2>{t('askQuestion')}</h2></div><span className="muted">{active.name}</span></div>
+            <form className="ask-athlete-form" onSubmit={askAthlete}>
+              <input value={askerName} onChange={(event) => setAskerName(event.target.value)} placeholder={t('askerName')} maxLength={40} required />
+              <input value={questionText} onChange={(event) => setQuestionText(event.target.value)} placeholder={t('question')} maxLength={240} required />
+              <button className="refresh-button" type="submit" disabled={questionPending || !supabase}>{t('sendQuestion')}</button>
+            </form>
+            {questionMessage && <p className="sync-message">{questionMessage}</p>}
+          </section>
           <EventChat />
           <section className="content-grid">
             <div className="rotation-grid">
@@ -619,6 +677,7 @@ function App() {
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>{t('latestRounds')}</h2></div></div>{paceError && <p className="sync-message">{paceError}</p>}
             {completedRounds.length === 0 ? <p className="empty">{t('noRounds')}</p> : <><div className="round-list">{visibleRounds.map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}<small className="round-phase">{round.phase} · {phases.find((item) => item.name === round.phase)?.distance}</small></strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>{roundsPageCount > 1 && <div className="schedule-pagination"><button className="refresh-button" onClick={() => setRoundsPage(Math.max(0, currentRoundsPage - 1))} disabled={currentRoundsPage === 0}>{t('previous')}</button><span>{t('page')} {currentRoundsPage + 1} / {roundsPageCount}</span><button className="refresh-button" onClick={() => setRoundsPage(Math.min(roundsPageCount - 1, currentRoundsPage + 1))} disabled={currentRoundsPage >= roundsPageCount - 1}>{t('next')}</button></div>}</>}
           </section>
+          <section className="panel athlete-blackboard"><div className="section-heading"><div><p className="eyebrow">{t('blackboard')}</p><h2>{t('askAthlete')}</h2></div><span className="muted">{publishedQuestions.length}</span></div>{publishedQuestions.length === 0 ? <p className="empty">{t('noQuestions')}</p> : <div className="blackboard-list">{publishedQuestions.map((item) => { const member = state.members.find((candidate) => candidate.id === item.participantId); return <article className="blackboard-entry" key={item.id}><p className="blackboard-meta">{member?.name ?? item.participantId} · {item.askerName}</p><p className="blackboard-question">“{item.question}”</p><p className="blackboard-answer">{item.answer}</p></article>; })}</div>}</section>
           <section className="panel team-introduction">
             <div className="team-intro-hero">
               <img className="team-photo" src="/data/team.JPEG" alt="Team Smi at the 24-hour triathlon" />

@@ -54,6 +54,20 @@ main { max-width: 1280px; margin: 0 auto; padding: 22px 26px 18px; }
 .athlete-cheer-bar span { white-space: nowrap; transform: rotate(-45deg); transform-origin: top center; }
 .cheer-button { border-color: #e7422e; color: #e7422e; }
 .cheer-button:hover { background: #e7422e; color: #fff8e8; }
+.ask-athlete-panel { margin-top: 22px; }
+.ask-athlete-form { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; margin-top: 12px; }
+.ask-athlete-form input, .athlete-question textarea { width: 100%; border: 2px solid var(--ink); border-radius: 0; background: var(--canvas); color: var(--ink); padding: 10px; }
+.athlete-question { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.athlete-question p { margin-bottom: 8px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.athlete-question textarea { min-height: 76px; margin-bottom: 8px; resize: vertical; }
+.athlete-blackboard { margin-top: 22px; background: #191919; color: #fff8e8; }
+.athlete-blackboard h2, .athlete-blackboard .muted { color: #fff8e8; }
+.blackboard-list { display: grid; gap: 12px; margin-top: 14px; }
+.blackboard-entry { border: 2px solid #f6c85f; padding: 12px; }
+.blackboard-meta { margin: 0 0 6px; color: #f6c85f; font-size: 10px; font-weight: 900; text-transform: uppercase; }
+.blackboard-question, .blackboard-answer { margin: 4px 0; line-height: 1.45; }
+.blackboard-question { color: #fff8e8; font-weight: 800; }
+.blackboard-answer { color: #4cc9a4; }
 .topbar > div { max-width: 800px; }
 .total-distance { display: inline-flex; align-items: baseline; gap: 10px; margin: 14px 0 0; border: 2px solid var(--ink); background: #f6c85f; color: #191919; padding: 6px 12px; box-shadow: 4px 4px 0 var(--ink); }
 .total-distance strong { font-size: 24px; font-weight: 900; letter-spacing: -.05em; }
@@ -246,6 +260,7 @@ footer { display: flex; justify-content: space-between; padding-top: 4px; color:
   .map-actions .status { flex: 0 0 100%; margin-left: 0; }
   .map-panel .map { height: 410px; }
   .member-login { grid-template-columns: 1fr; }
+  .ask-athlete-form { grid-template-columns: 1fr; }
   .athlete-stats { grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }
   .round-row { grid-template-columns: 32px 1fr auto; }
   .round-row span:nth-child(3) { grid-column: 2 / -1; font-size: 10px; }

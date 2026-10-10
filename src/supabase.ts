@@ -34,6 +34,15 @@ export type CheerTotal = { participantId: string; total: number };
 export type CheerSummary = CheerTotal & { recent: number };
 export type CheerBucket = { bucket: string; total: number };
 export type CheerTimelineBucket = CheerBucket;
+export type AthleteQuestion = {
+  id: string;
+  participantId: string;
+  askerName: string;
+  question: string;
+  answer?: string;
+  askedAt: string;
+  answeredAt?: string;
+};
 
 function memberClient() {
   if (!url || !anonKey) throw new Error('Supabase is not configured');
@@ -126,6 +135,47 @@ export async function loadCheerTimeline(participantId: string): Promise<CheerTim
     bucket: row.bucket,
     total: Number(row.total),
   }));
+}
+
+function mapAthleteQuestion(row: {
+  id: string; participant_id: string; asker_name: string; question: string;
+  answer: string | null; asked_at: string; answered_at: string | null;
+}): AthleteQuestion {
+  return {
+    id: row.id, participantId: row.participant_id, askerName: row.asker_name,
+    question: row.question, answer: row.answer ?? undefined, askedAt: row.asked_at,
+    answeredAt: row.answered_at ?? undefined,
+  };
+}
+
+export async function submitAthleteQuestion(participantId: string, askerName: string, question: string) {
+  const { error } = await memberClient().rpc('t24_submit_athlete_question', {
+    p_event_id: eventId, p_participant_id: participantId,
+    p_asker_name: askerName, p_question: question,
+  });
+  if (error) throw error;
+}
+
+export async function loadPublishedAthleteQuestions(): Promise<AthleteQuestion[]> {
+  const { data, error } = await memberClient().rpc('t24_published_athlete_questions', { p_event_id: eventId });
+  if (error) throw error;
+  return ((data ?? []) as Parameters<typeof mapAthleteQuestion>[0][]).map(mapAthleteQuestion);
+}
+
+export async function loadPendingAthleteQuestions(participantId: string): Promise<AthleteQuestion[]> {
+  const { data, error } = await memberClient().rpc('t24_pending_athlete_questions', {
+    p_event_id: eventId, p_participant_id: participantId,
+  });
+  if (error) throw error;
+  return ((data ?? []) as Parameters<typeof mapAthleteQuestion>[0][]).map(mapAthleteQuestion);
+}
+
+export async function answerAthleteQuestion(questionId: string, participantId: string, answer: string) {
+  const { error } = await memberClient().rpc('t24_answer_athlete_question', {
+    p_event_id: eventId, p_question_id: questionId,
+    p_participant_id: participantId, p_answer: answer,
+  });
+  if (error) throw error;
 }
 
 export function hasMemberSession() {
