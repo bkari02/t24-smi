@@ -19,6 +19,15 @@ const participantImages: Record<string, string> = {
   p5: '/data/benni.PNG',
 };
 
+const participantProfiles = [
+  { emoji: '🏊‍♀️', name: 'Lilli', title: 'Die menschliche Schwimmboje', strength: 'Schwimmen. Und zwar so viel, dass die anderen wahrscheinlich schon nach der ersten Runde vergessen, wie Wasser überhaupt aussieht.', weakness: 'Fahrrad fahren, insbesondere dann, wenn ein Reifen platzt. Während andere schon wieder auf der Strecke sind, führt Lilli vermutlich noch eine intensive Beziehung zu Reifenheber und Ersatzschlauch.', imageUrl: participantImages.p2 },
+  { emoji: '🚴', name: 'Matze', title: 'Giro de Risiko', strength: 'Radfahren, dank Giro-Training. Matze hat vermutlich mehr Höhenmeter in den Beinen als wir gemeinsame Trainingseinheiten. Dazu kommt eine ausgeprägte Risikobereitschaft – eine Eigenschaft, die bei einem 24-Stunden-Rennen entweder Gold wert ist oder uns sehr früh einen Sanitäter beschert.', weakness: 'Sein geschwächtes Immunsystem. Während andere ihre Wattwerte optimieren, kämpft Matze mit der Frage, ob sein Körper überhaupt für den Wettkampf freigeschaltet ist.', imageUrl: participantImages.p4 },
+  { emoji: '💻', name: 'Benni', title: 'Der Webmaster auf Knieschoner-Mission', strength: 'Webmaster und E-Scooter fahren. Wenn unsere Website nicht funktioniert, ist Benni der Mann. Wenn unsere Beine nicht mehr funktionieren, wäre ein E-Scooter zumindest konzeptionell schon mal vorhanden.', weakness: 'Das linke Knie. Ein Körperteil, das sich offenbar schon vor dem Start über die Teilnahmebedingungen beschweren möchte.', imageUrl: participantImages.p5 },
+  { emoji: '⛰️', name: 'Kiesch', title: 'Der Bergziegen-Beauftragte', strength: 'Climbing hills. Während andere am Anstieg ihre Lebensentscheidungen hinterfragen, sieht Kiesch vermutlich nur eine weitere Gelegenheit, Höhenmeter zu sammeln.', weakness: 'Die Schulter. Ein kleines Detail, das beim Triathlon mit Schwimmen, Radfahren und allem, was man sonst noch mit seinem Körper anstellen muss, durchaus störend sein könnte.', imageUrl: participantImages.p1 },
+  { emoji: '🌊', name: 'Jule', title: 'Der Seestern mit Rennrad-Ambitionen', strength: 'Radfahren. Hoffentlich. Wir setzen hier bewusst auf Optimismus, denn bei Team Smi ist Zuversicht oft die einzige Form der Vorbereitung.', weakness: 'Schwimmen wie ein Seestern. Und zwar nicht wie einer, der elegant durchs Meer gleitet, sondern eher wie einer, der vom Leben überrascht wurde und jetzt erstmal waagerecht im Wasser liegt.', imageUrl: participantImages.p3 },
+  { emoji: '👑', name: 'Svenja', title: 'Teamchefin, Sprachgenie und Quetschie-Spezialistin', strength: 'Allrounderin, Managerin, Französisch auf muttersprachlichem Niveau – und sie kann Quetschies öffnen wie andere Menschen Excel-Tabellen. Ohne Svenja läuft bei uns nichts. Wirklich nichts. Wahrscheinlich würde ohne sie nicht einmal der Startschuss fallen, weil wir ihn sprachlich nicht verstehen würden.', weakness: 'Sie kann nicht Nein sagen. Außerdem wusste sie bis heute nicht, was sie mit ihrer Zusage eigentlich alles angenommen hat. Jetzt ist sie Managerin eines Teams, das 24 Stunden lang Sport machen soll, zu sechst gemeldet ist, zu fünft erscheint und sprachlich ungefähr auf dem Niveau eines verwirrten Touristen unterwegs ist.' },
+];
+
 const initialState: EventState = {
   eventStartedAt: new Date().toISOString(),
   phase: 'Swim',
@@ -452,6 +461,41 @@ function App() {
           <section className="panel planned-schedule"><div className="section-heading"><div><p className="eyebrow">PLANNED RELAY</p><h2>When to tune in</h2></div><span className="muted">Live controls can override this plan</span></div>{scheduleError && <p className="sync-message">{scheduleError}</p>}{remainingSchedule.length === 0 ? <p className="empty">No upcoming schedule entries.</p> : <><div className="planned-list">{visibleSchedule.map((item) => { const member = state.members.find((candidate) => candidate.name.toLowerCase() === item.participant.toLowerCase()); const isCurrent = item.phase === state.phase && item.participant.toLowerCase() === active.name.toLowerCase(); return <div className={`planned-row ${isCurrent ? 'current' : ''}`} key={`${item.phase}-${item.loop}`}><span className="planned-phase">{item.phase}</span><span className="planned-loop">#{item.loop}</span>{member?.imageUrl ? <img className="participant-avatar" src={member.imageUrl} alt="" /> : <span className="member-dot" style={{ background: member?.color ?? '#999' }} />}<strong>{item.participant}</strong><span className="planned-time">{scheduleDate(item.start)} · {scheduleClock(item.start)}–{scheduleClock(item.end)}</span><b>{item.duration}</b></div>; })}</div><div className="schedule-pagination"><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.max(0, page - 1))} disabled={schedulePage === 0}>Previous</button><span>Page {schedulePage + 1} / {schedulePageCount}</span><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.min(schedulePageCount - 1, page + 1))} disabled={schedulePage >= schedulePageCount - 1}>Next</button></div></>}</section>
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>Latest rounds</h2></div><span className="muted">{phaseConfig.distance} per round</span></div>{paceError && <p className="sync-message">{paceError}</p>}
             {completedRounds.length === 0 ? <p className="empty">No rounds recorded yet. Start the first round when your swimmer enters the course.</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>}
+          </section>
+          <section className="panel team-introduction">
+            <div className="team-intro-hero">
+              <img className="team-photo" src="/data/team.JPEG" alt="Team Smi beim 24-Stunden-Triathlon" />
+              <div className="team-intro-copy">
+                <p className="eyebrow">MEET TEAM SMI</p>
+                <h2>🇫🇷 Team Smi – 6 gemeldet, 5 am Start, 0 Ahnung</h2>
+                <p>24 Stunden. Ein Staffel-Triathlon. Südfrankreich. Fünf Athlet:innen, die für sechs gemeldet sind. Kaum Vorbereitung, null Sprachkenntnisse und ein Team, bei dem die größte sportliche Leistung vielleicht schon die Anreise ist. Bienvenue bei Team Smi! 🇫🇷🚴‍♀️🏊‍♂️🏃‍♂️</p>
+                <p>Unser Plan? Gibt es nicht. Unser Training? Überschaubar. Unsere Französischkenntnisse? Reichen gerade so für Bonjour, Merci und im Notfall Croissant. Aber hey, wir sind hier, um 24 Stunden lang alles zu geben.</p>
+              </div>
+            </div>
+            <div className="profile-grid">
+              {participantProfiles.map((profile) => <article className="profile-card" key={profile.name}>
+                <div className="profile-heading">
+                  {profile.imageUrl ? <img className="profile-avatar" src={profile.imageUrl} alt="" /> : <span className="profile-emoji">{profile.emoji}</span>}
+                  <div><h3>{profile.emoji} {profile.name}</h3><p>{profile.title}</p></div>
+                </div>
+                <p><strong>Stärke:</strong> {profile.strength}</p>
+                <p><strong>Schwäche:</strong> {profile.weakness}</p>
+              </article>)}
+            </div>
+            <div className="mission-copy">
+              <h3>🏆 Unsere Mission: 24 Stunden Chaos mit Ansage</h3>
+              <p>Wir treten an, um zu beweisen, dass man für einen 24-Stunden-Staffel-Triathlon nicht zwingend monatelanges Training, perfekte Ausrüstung oder Sprachkenntnisse braucht.</p>
+              <p>Man braucht:</p>
+              <ul>
+                <li>eine Schwimmerin, die den Wasserstand persönlich senkt,</li>
+                <li>einen Radfahrer mit Giro-Erfahrung und einem Immunsystem auf Bewährung,</li>
+                <li>einen Webmaster mit Knieproblemen,</li>
+                <li>eine Bergziege mit Schulterbaustelle,</li>
+                <li>einen Seestern auf dem Weg zur Radkarriere,</li>
+                <li>und eine Managerin, die bis gestern noch ein normales Leben hatte.</li>
+              </ul>
+              <p className="mission-finale">Allez, Team Smi! 🇫🇷🔥</p>
+            </div>
           </section>
         </>
       <footer><span>Shared race state · OwnTracks locations</span><span>Phase ETA uses the last 3 completed rounds</span></footer>

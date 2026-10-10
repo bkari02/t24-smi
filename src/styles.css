@@ -158,6 +158,25 @@ select { min-width: 130px; border: 2px solid var(--canvas); border-radius: 0; ba
 .round-row strong, .round-row b { color: var(--ink); }
 .round-row b { white-space: nowrap; }
 .round-number { display: grid; width: 30px; height: 30px; place-items: center; border: 2px solid var(--ink); background: #f6c85f; color: #191919; font-weight: 900; }
+.team-introduction { margin-bottom: 22px; padding: 18px; }
+.team-intro-hero { display: grid; grid-template-columns: minmax(260px, .8fr) 1.2fr; gap: 24px; align-items: stretch; }
+.team-photo { width: 100%; height: 100%; min-height: 280px; border: 2px solid var(--ink); object-fit: cover; object-position: center; }
+.team-intro-copy { align-self: center; }
+.team-intro-copy h2 { max-width: 680px; margin-bottom: 18px; font-size: clamp(28px, 4vw, 52px); }
+.team-intro-copy p, .mission-copy p, .profile-card p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+.profile-card { padding: 16px; border: 2px solid var(--ink); background: var(--soft); }
+.profile-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.profile-avatar, .profile-emoji { width: 52px; height: 52px; flex: 0 0 52px; border: 2px solid var(--ink); border-radius: 50%; object-fit: cover; }
+.profile-emoji { display: grid; place-items: center; background: #f6c85f; font-size: 25px; }
+.profile-card h3 { margin: 0; font-size: 20px; letter-spacing: -.05em; }
+.profile-card .profile-heading p { margin: 3px 0 0; color: var(--ink); font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.profile-card p { margin: 10px 0 0; }
+.profile-card strong, .mission-copy h3, .mission-finale { color: var(--ink); }
+.mission-copy { margin-top: 24px; padding-top: 20px; border-top: 2px solid var(--ink); }
+.mission-copy h3 { margin: 0 0 12px; font-size: clamp(22px, 3vw, 34px); letter-spacing: -.06em; }
+.mission-copy ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 28px; margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.mission-finale { font-size: 18px !important; font-weight: 900; }
 footer { display: flex; justify-content: space-between; padding-top: 4px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
 @media (max-width: 720px) {
   main { padding: 16px 14px 18px; }
@@ -181,5 +200,9 @@ footer { display: flex; justify-content: space-between; padding-top: 4px; color:
   .planned-row { grid-template-columns: 52px 28px 32px 1fr auto; }
   .planned-time { grid-column: 1 / -1; padding-left: 8px; }
   .chat-container, .chat-container .minnit-chat-sembed { height: clamp(360px, 70vh, 500px); }
+  .team-introduction { padding: 14px; }
+  .team-intro-hero { grid-template-columns: 1fr; gap: 18px; }
+  .team-photo { min-height: 220px; max-height: 300px; }
+  .profile-grid, .mission-copy ul { grid-template-columns: 1fr; }
   footer { gap: 10px; flex-direction: column; }
 }
