@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/eventchat.tsx","./src/mappanel.tsx","./src/main.tsx","./src/routeprogress.ts","./src/supabase.ts","./src/types.ts","./src/vite-env.d.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/elevationprofile.tsx","./src/eventchat.tsx","./src/mappanel.tsx","./src/main.tsx","./src/routeprogress.ts","./src/supabase.ts","./src/types.ts","./src/vite-env.d.ts"],"version":"5.9.3"}

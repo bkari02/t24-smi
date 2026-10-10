@@ -28,6 +28,8 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
   const routeLayers = useRef<Partial<Record<Phase, L.Polyline>>>({});
   const startMarkers = useRef<Partial<Record<Phase, L.CircleMarker>>>({});
   const cancelledSwimLayer = useRef<L.Polyline>();
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   const cancelledSwimStartMarker = useRef<L.CircleMarker>();
 
   useEffect(() => {
@@ -58,7 +60,6 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     instance.on('zoomend', () => updateImageMarkerSizes(instance.getZoom()));
     let disposed = false;
     const courses: { phase: Phase; file: string; color: string }[] = [
-      { phase: 'Run 1', file: 'run2_5km.gpx', color: '#ff1493' },
       { phase: 'Bike', file: 'bike.gpx', color: '#f26b4f' },
       { phase: 'Run 2', file: 'run.gpx', color: '#91a7ff' },
     ];
@@ -97,8 +98,8 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
           startMarkers.current[coursePhase] = startMarker;
           route.addTo(instance);
           startMarker.addTo(instance);
-          updateStartMarkerStyles(phase);
-          updateRouteStyles(phase);
+          updateStartMarkerStyles(phaseRef.current);
+          updateRouteStyles(phaseRef.current);
         })
         .catch((error: unknown) => {
           console.error(`Could not load ${file}`, error);

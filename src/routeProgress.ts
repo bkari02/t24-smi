@@ -1,7 +1,7 @@
 import { Location, Phase } from './types';
 
 type Point = [number, number];
-const files: Partial<Record<Phase, string>> = { 'Run 1': 'run2_5km.gpx', Bike: 'bike.gpx', 'Run 2': 'run.gpx' };
+const files: Partial<Record<Phase, string>> = { Bike: 'bike.gpx', 'Run 2': 'run.gpx' };
 
 function distance(a: Point, b: Point) {
   const lat = ((a[0] + b[0]) / 2) * Math.PI / 180;

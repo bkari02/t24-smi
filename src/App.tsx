@@ -1,8 +1,9 @@
 import { CSSProperties, FormEvent, useEffect, useRef, useState } from 'react';
 import MapPanel from './MapPanel';
 import EventChat from './EventChat';
+import ElevationProfile from './ElevationProfile';
 import { EventState, Location, Phase, Round } from './types';
-import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, loadCheerSummary, loadLatestLocations, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, supabase } from './supabase';
+import { eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, loadCheerSummary, loadCheerTimeline, loadLatestLocations, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, supabase } from './supabase';
 import { loadRouteProgress, RouteProgress } from './routeProgress';
 
 const phases: { name: Phase; duration: number; distance: string }[] = [
@@ -96,7 +97,8 @@ const translations = {
     language: 'Language', mode: 'Mode', fan: 'Fan', member: 'Team member', athlete: 'Athlete',
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Reset',
     fanView: 'Fan view', memberView: 'Team member view', athleteView: 'Athlete view',
-    activeViewers: 'active viewers', totalDistance: 'covered by the team', welcome: 'WELCOME TO TEAM SMI', introTitle: '24 hours, three disciplines, one active team member',
+    activeViewers: 'active viewers', elevationProfile: 'ELEVATION PROFILE', ascent: 'Ascent', lowest: 'Lowest', highest: 'Highest', lapDistance: 'Lap', onCourse: 'active athlete', totalDistance: 'covered by the team', welcome: 'WELCOME TO TEAM SMI', introTitle: '24 hours, three disciplines, one active team member',
+    athleteAccess: 'ATHLETE ACCESS', chooseAthlete: 'Choose athlete', athletePassword: 'Password', athleteUnlock: 'Open athlete view', athletePasswordHint: 'Use smi- followed by your first name', athleteLoginError: 'Wrong athlete password.', athleteCheers: 'YOUR CHEERS', cheersTotal: 'total cheers', cheerTimeline: 'CHEERS OVER TIME', noCheers: 'No cheers yet.',
     introP1: 'We are starting as a team of five in a 24-hour relay triathlon: first 4 hours of swimming, then 12 hours of cycling, and finally 8 hours of running.',
     introP2: 'Only one person is racing at a time. Follow us during the event, join the chat, and send us cheers. Click the “Cheer for ...” button to cheer.',
     officialTime: 'Official start: Saturday, 13:00 · Finish: Sunday, 13:00', dontShow: 'Do not show again',
@@ -120,7 +122,8 @@ const translations = {
     language: 'Sprache', mode: 'Modus', fan: 'Fan', member: 'Teammitglied', athlete: 'Athlet:in',
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Zurücksetzen',
     fanView: 'Fan-Ansicht', memberView: 'Teammitglied-Ansicht', athleteView: 'Athlet:innen-Ansicht',
-    activeViewers: 'aktive Zuschauer:innen', totalDistance: 'vom Team zurückgelegt', welcome: 'WILLKOMMEN BEI TEAM SMI', introTitle: '24 Stunden, drei Disziplinen, ein aktives Teammitglied',
+    activeViewers: 'aktive Zuschauer:innen', elevationProfile: 'HÖHENPROFIL', ascent: 'Anstieg', lowest: 'Tiefster Punkt', highest: 'Höchster Punkt', lapDistance: 'Runde', onCourse: 'aktive:r Athlet:in', totalDistance: 'vom Team zurückgelegt', welcome: 'WILLKOMMEN BEI TEAM SMI', introTitle: '24 Stunden, drei Disziplinen, ein aktives Teammitglied',
+    athleteAccess: 'ATHLETEN-ZUGANG', chooseAthlete: 'Athlet:in auswählen', athletePassword: 'Passwort', athleteUnlock: 'Athleten-Ansicht öffnen', athletePasswordHint: 'smi- plus dein Vorname', athleteLoginError: 'Falsches Athleten-Passwort.', athleteCheers: 'DEINE CHEERS', cheersTotal: 'Cheers gesamt', cheerTimeline: 'CHEERS IM ZEITVERLAUF', noCheers: 'Noch keine Cheers.',
     introP1: 'Wir starten zu fünft bei einem 24-Stunden-Staffel-Triathlon: zuerst 4 Stunden Schwimmen, danach 12 Stunden Radfahren und zum Schluss 8 Stunden Laufen.',
     introP2: 'Es ist immer nur eine Person gleichzeitig im Rennen. Hier könnt ihr uns verfolgen, im Chat mitfiebern und uns anfeuern. Klickt dafür auf den „Cheer for ...“-Button.',
     officialTime: 'Offizieller Start: Samstag, 13:00 Uhr · Ende: Sonntag, 13:00 Uhr', dontShow: 'Nicht mehr anzeigen',
@@ -174,10 +177,15 @@ function App() {
   const [memberAuthed, setMemberAuthed] = useState(hasMemberSession());
   const [memberPassword, setMemberPassword] = useState('');
   const [memberLoginError, setMemberLoginError] = useState('');
+  const [athletePassword, setAthletePassword] = useState('');
+  const [athleteLoginError, setAthleteLoginError] = useState('');
+  const [athleteAuthed, setAthleteAuthed] = useState(false);
+  const [selectedAthleteId, setSelectedAthleteId] = useState(() => params.get('participant') ?? 'p1');
   const [viewerCount, setViewerCount] = useState<number>();
   const [cheers, setCheers] = useState<Record<string, number>>({});
   const [recentCheers, setRecentCheers] = useState<Record<string, number>>({});
   const [cheerGraph, setCheerGraph] = useState<{ bucket: string; total: number }[]>([]);
+  const [athleteCheerTimeline, setAthleteCheerTimeline] = useState<{ bucket: string; total: number }[]>([]);
   const [cheerBurst, setCheerBurst] = useState(0);
   const [cheerCelebration, setCheerCelebration] = useState(false);
   const [celebrationLevel, setCelebrationLevel] = useState(1);
@@ -225,13 +233,13 @@ function App() {
     const viewerId = window.localStorage.getItem('t24-viewer-id') ?? crypto.randomUUID();
     window.localStorage.setItem('t24-viewer-id', viewerId);
     const heartbeat = () => {
-      void recordViewerHeartbeat(viewerId, view === 'athlete' ? params.get('participant') ?? undefined : undefined)
+      void recordViewerHeartbeat(viewerId, view === 'athlete' && athleteAuthed ? selectedAthleteId : undefined)
         .then(() => loadActiveViewerCount()).then(setViewerCount).catch(() => undefined);
     };
     heartbeat();
     const timer = window.setInterval(heartbeat, 180000);
     return () => window.clearInterval(timer);
-  }, [view]);
+  }, [view, athleteAuthed, selectedAthleteId]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -366,7 +374,7 @@ function App() {
 
   const active = state.members.find((member) => member.id === state.activeParticipantId) ?? state.members[0];
   const next = state.members.find((member) => member.id === state.nextParticipantId) ?? state.members[1];
-  const athleteId = view === 'athlete' ? params.get('participant') ?? active.id : active.id;
+  const athleteId = view === 'athlete' ? selectedAthleteId : active.id;
   const athlete = state.members.find((member) => member.id === athleteId) ?? active;
   const activeRound = [...state.rounds].reverse().find((round) => round.participantId === active.id && !round.finishedAt);
   const completedRounds = state.rounds.filter((round) => round.finishedAt);
@@ -433,10 +441,12 @@ function App() {
     : undefined;
   const estimateSource = recentDurations.length ? 'recent phase laps' : 'CSV estimate';
   const canControl = view === 'member' && memberAuthed;
+  const athleteAccess = view === 'athlete' && athleteAuthed;
   const activeRecentCheers = recentCheers[active.id] ?? 0;
   const recentCheerScale = Math.min(1.55, 1 + activeRecentCheers * 0.09);
   const recentCheerTone = activeRecentCheers >= 10 ? 'hot' : activeRecentCheers >= 4 ? 'warm' : 'cool';
   const maxGraphValue = Math.max(1, ...cheerGraph.map((item) => item.total));
+  const maxAthleteCheer = Math.max(1, ...athleteCheerTimeline.map((item) => item.total));
   const todayStart = new Date(now);
   todayStart.setHours(13, 0, 0, 0);
   const secondsUntilTodayStart = (todayStart.getTime() - now) / 1000;
@@ -455,6 +465,11 @@ function App() {
     if (view !== 'athlete') return;
     void loadRouteProgress(state.phase, athleteLocation).then(setRouteProgress).catch(() => setRouteProgress(undefined));
   }, [view, state.phase, athleteLocation]);
+
+  useEffect(() => {
+    if (view !== 'athlete' || !athleteAuthed || !supabase) return;
+    void loadCheerTimeline(athleteId).then(setAthleteCheerTimeline).catch((error: Error) => setSyncMessage(`Cheer history unavailable: ${error.message}`));
+  }, [view, athleteAuthed, athleteId]);
 
   function cheer() {
     setCheerPending(true);
@@ -481,6 +496,19 @@ function App() {
     void startMemberSession(memberPassword)
       .then(() => { setMemberAuthed(true); setMemberPassword(''); })
       .catch((error: Error) => setMemberLoginError(error.message));
+  }
+
+  function loginAthlete(event: FormEvent) {
+    event.preventDefault();
+    setAthleteLoginError('');
+    const expected = `smi-${athlete.name.toLowerCase()}`;
+    if (athletePassword.trim().toLowerCase() !== expected) {
+      setAthleteAuthed(false);
+      setAthleteLoginError(t('athleteLoginError'));
+      return;
+    }
+    setAthleteAuthed(true);
+    setAthletePassword('');
   }
 
   function focusParticipant(id: string) {
@@ -521,7 +549,11 @@ function App() {
         <div><label className="language-switcher">{t('language')} <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN · English</option><option value="de">DE · Deutsch</option></select></label><p className="eyebrow">T24 XTREME TRIATHLON · SMIBOARD </p><h2>Never Schmu, always Smi!</h2><p className="total-distance"><strong>{totalDistanceKm.toFixed(1)} km</strong><span>{t('totalDistance')} · {completedRounds.length} {t('rounds')}</span></p></div>
         <div className="header-actions">
           <label className="mode-select">{t('mode')}
-            <select value={view} onChange={(event) => setView(event.target.value as 'fan' | 'member' | 'athlete')}>
+            <select value={view} onChange={(event) => {
+              const nextView = event.target.value as 'fan' | 'member' | 'athlete';
+              setView(nextView);
+              if (nextView !== 'athlete') setAthleteAuthed(false);
+            }}>
               <option value="fan">{t('fan')}</option>
               <option value="member">{t('member')}</option>
               <option value="athlete">{t('athlete')}</option>
@@ -534,10 +566,12 @@ function App() {
       </header>
       <div className="view-status"><span>{view === 'fan' ? t('fanView') : view === 'member' ? t('memberView') : `${t('athleteView')} · ${athlete.name}`}</span>{viewerCount !== undefined && <span>{viewerCount} {t('activeViewers')}</span>}</div>
       {view === 'member' && !memberAuthed && <form className="member-login" onSubmit={loginMember}><div><p className="eyebrow">{t('teamAccess')}</p><h2>{t('enterPassword')}</h2></div><input type="password" value={memberPassword} onChange={(event) => setMemberPassword(event.target.value)} placeholder={t('sharedPassword')} required /><button className="primary-button" type="submit">{t('unlock')}</button>{memberLoginError && <p className="sync-message">{memberLoginError}</p>}</form>}
+      {view === 'athlete' && !athleteAuthed && <form className="member-login athlete-login" onSubmit={loginAthlete}><div><p className="eyebrow">{t('athleteAccess')}</p><h2>{t('athleteUnlock')}</h2></div><select value={selectedAthleteId} onChange={(event) => { setSelectedAthleteId(event.target.value); setAthleteAuthed(false); setAthleteLoginError(''); }} aria-label={t('chooseAthlete')}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><input type="password" value={athletePassword} onChange={(event) => setAthletePassword(event.target.value)} placeholder={t('athletePasswordHint')} required /><button className="primary-button" type="submit">{t('athleteUnlock')}</button>{athleteLoginError && <p className="sync-message">{athleteLoginError}</p>}</form>}
       {sharedLoading && <p className="sync-message">{t('loading')}</p>}
       {syncMessage && <p className="sync-message">{syncMessage}</p>}
       <>
           <section className="panel map-panel map-priority"><div className="section-heading"><div><p className="eyebrow">{t('liveMap')}</p><h2>{Object.keys(state.locations).length ? t('allParticipants') : t('coursePreview')}</h2></div><div className="map-actions"><span className="map-live-indicator">{t('nowActive')} <span className="member-dot" style={{ background: active.color }} />{active.name} · {state.phase}</span><button className="refresh-button" onClick={() => loadLatestLocations().then((locations) => { update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }); setLastLocationSync(new Date()); }).catch((error: Error) => setSyncMessage(`Location refresh failed: ${error.message}`))} disabled={locationSyncing}>{locationSyncing ? t('refreshing') : t('refresh')}</button>{lastLocationSync && <span className="status">{t('updated')} {Math.max(0, Math.round((now - lastLocationSync.getTime()) / 1000))}s ago</span>}</div></div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} /></section>
+          <ElevationProfile currentPhase={state.phase} location={activeLocation} labels={{ title: t('elevationProfile'), ascent: t('ascent'), lowest: t('lowest'), highest: t('highest'), distance: t('lapDistance'), you: t('onCourse') }} />
           <section className="hero-grid">
             <div className="phase-card">
               <div className="section-heading"><div><p className="eyebrow">{t('currentPhase')}</p><h2>{state.phase}</h2></div><span className="phase-dot" /></div>
@@ -552,7 +586,7 @@ function App() {
               {estimatedFinish && typicalDuration !== undefined && estimatedFinishIn !== undefined && <p className="estimate">{t('estimatedFinish')} {formatClock(estimatedFinish.toISOString(), true)}<span className="estimate-countdown">in {formatDurationWithSeconds(estimatedFinishIn)}</span><small>{t('basedOn')} · {estimateSource === 'CSV estimate' ? t('csvEstimate') : t('recentLaps')} · {formatDurationWithSeconds(typicalDuration)}</small></p>}
             </div>
           </section>
-          {view === 'athlete' && <section className="panel athlete-panel"><p className="eyebrow">{t('yourTrack')}</p><h2>{athlete.name}</h2><div className="athlete-stats"><strong>{routeProgress ? `${routeProgress.completedKm.toFixed(1)} km` : '—'}</strong><span>{t('completed')}</span><strong>{routeProgress ? `${routeProgress.remainingKm.toFixed(1)} km` : '—'}</strong><span>{t('remaining')}</span><strong>{routeProgress ? `${Math.round(routeProgress.percent)}%` : '—'}</strong><span>{t('approxProgress')}</span></div><p className="muted">{t('gpsNote')}</p></section>}
+          {athleteAccess && <><section className="panel athlete-panel"><p className="eyebrow">{t('yourTrack')}</p><h2>{athlete.name}</h2><div className="athlete-stats"><strong>{routeProgress ? `${routeProgress.completedKm.toFixed(1)} km` : '—'}</strong><span>{t('completed')}</span><strong>{routeProgress ? `${routeProgress.remainingKm.toFixed(1)} km` : '—'}</strong><span>{t('remaining')}</span><strong>{routeProgress ? `${Math.round(routeProgress.percent)}%` : '—'}</strong><span>{t('approxProgress')}</span></div><p className="muted">{t('gpsNote')}</p></section><section className="panel athlete-cheers"><div className="section-heading"><div><p className="eyebrow">{t('athleteCheers')}</p><h2>{athlete.name}</h2></div><strong className="athlete-cheer-total">{cheers[athlete.id] ?? 0} {t('cheersTotal')}</strong></div>{athleteCheerTimeline.length === 0 ? <p className="empty">{t('noCheers')}</p> : <><p className="eyebrow">{t('cheerTimeline')}</p><div className="athlete-cheer-chart">{athleteCheerTimeline.map((item) => <div className="athlete-cheer-bar" key={item.bucket} title={`${formatClock(item.bucket)} · ${item.total}`}><i style={{ height: `${Math.max(8, (item.total / maxAthleteCheer) * 100)}%` }} /><span>{formatClock(item.bucket)}</span></div>)}</div></>}</section></>}
           {canControl && <section className="control-panel">
             <button className="primary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={activeRound ? finishRound : startRound}>{activeRound ? t('finishRound') : t('startNext')}</button>
             <div className="handover-row"><label htmlFor="next">{t('nextUp')}</label><select id="next" value={state.nextParticipantId} onChange={(event) => setNext(event.target.value)} disabled={mutationPending}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button className="secondary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={handover}>{t('handover')} {next.name}</button></div>

@@ -33,6 +33,7 @@ export type MemberSession = {
 export type CheerTotal = { participantId: string; total: number };
 export type CheerSummary = CheerTotal & { recent: number };
 export type CheerBucket = { bucket: string; total: number };
+export type CheerTimelineBucket = CheerBucket;
 
 function memberClient() {
   if (!url || !anonKey) throw new Error('Supabase is not configured');
@@ -108,6 +109,17 @@ export async function loadCheerSummary(): Promise<CheerSummary[]> {
 export async function loadCheerHourly(participantId?: string): Promise<CheerBucket[]> {
   const { data, error } = await memberClient().rpc('t24_cheer_hourly', {
     p_event_id: eventId, p_participant_id: participantId ?? null,
+  });
+  if (error) throw error;
+  return ((data ?? []) as { bucket: string; total: number }[]).map((row) => ({
+    bucket: row.bucket,
+    total: Number(row.total),
+  }));
+}
+
+export async function loadCheerTimeline(participantId: string): Promise<CheerTimelineBucket[]> {
+  const { data, error } = await memberClient().rpc('t24_cheer_timeline', {
+    p_event_id: eventId, p_participant_id: participantId,
   });
   if (error) throw error;
   return ((data ?? []) as { bucket: string; total: number }[]).map((row) => ({
