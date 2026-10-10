@@ -31,7 +31,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 22px 26px 18px; }
 .start-countdown-banner .eyebrow { margin: 0; color: #e7422e; }
 .start-countdown-banner strong { font-size: clamp(18px, 3vw, 28px); letter-spacing: -.04em; }
 .start-countdown-banner > span:last-child { font-size: 11px; font-weight: 900; text-transform: uppercase; }
-.race-change-banner { display: flex; align-items: baseline; gap: 16px; margin: -8px 0 18px; border: 2px solid var(--ink); background: #e8f1ed; color: var(--ink); padding: 10px 14px; box-shadow: 5px 5px 0 var(--ink); }
+.race-change-banner { display: flex; align-items: baseline; gap: 16px; margin: -8px 0 18px; border: 2px solid var(--ink); background: #e8f1ed; color: #191919; padding: 10px 14px; box-shadow: 5px 5px 0 var(--ink); }
 .race-change-banner .eyebrow { flex: 0 0 auto; margin: 0; color: #e7422e; }
 .race-change-banner strong { font-size: 14px; line-height: 1.35; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 24px; border-bottom: 3px solid var(--ink); }
@@ -48,6 +48,9 @@ main { max-width: 1280px; margin: 0 auto; padding: 22px 26px 18px; }
 .cheer-button { border-color: #e7422e; color: #e7422e; }
 .cheer-button:hover { background: #e7422e; color: #fff8e8; }
 .topbar > div { max-width: 800px; }
+.total-distance { display: inline-flex; align-items: baseline; gap: 10px; margin: 14px 0 0; border: 2px solid var(--ink); background: #f6c85f; color: #191919; padding: 6px 12px; box-shadow: 4px 4px 0 var(--ink); }
+.total-distance strong { font-size: 24px; font-weight: 900; letter-spacing: -.05em; }
+.total-distance span { font-size: 10px; font-weight: 900; text-transform: uppercase; }
 .eyebrow { margin: 0 0 8px; color: #e7422e; font-size: 11px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
 h1, h2, p { margin-top: 0; }
 h1 { margin: 0; font-size: clamp(48px, 10vw, 132px); font-weight: 900; letter-spacing: -.09em; line-height: .78; text-transform: uppercase; }
@@ -178,6 +181,7 @@ select { min-width: 130px; border: 2px solid var(--canvas); border-radius: 0; ba
 .round-row { display: grid; grid-template-columns: 38px 1fr 1.5fr auto; align-items: center; gap: 10px; padding: 13px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .round-row strong, .round-row b { color: var(--ink); }
 .round-row b { white-space: nowrap; }
+.round-phase { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .round-number { display: grid; width: 30px; height: 30px; place-items: center; border: 2px solid var(--ink); background: #f6c85f; color: #191919; font-weight: 900; }
 .team-introduction { margin-bottom: 22px; padding: 18px; }
 .team-intro-hero { display: grid; grid-template-columns: minmax(260px, .8fr) 1.2fr; gap: 24px; align-items: stretch; }

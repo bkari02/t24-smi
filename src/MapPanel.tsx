@@ -89,15 +89,13 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
             .filter((point): point is L.LatLngExpression => point !== undefined);
           if (points.length < 2) throw new Error(`${file} contains fewer than two valid track points`);
           const route = L.polyline(points, {
-            color, weight: coursePhase === 'Run 1' ? 7 : 4,
-            opacity: coursePhase === 'Run 1' ? 1 : 0.85,
+            color, weight: 4, opacity: 0.85,
           });
           const startMarker = L.circleMarker(points[0])
-            .bindTooltip(`${coursePhase} start / handover`, { permanent: coursePhase === 'Run 1', direction: 'top' })
+            .bindTooltip(`${coursePhase} start / handover`)
           routeLayers.current[coursePhase] = route;
           startMarkers.current[coursePhase] = startMarker;
           route.addTo(instance);
-          if (coursePhase === 'Run 1') route.bringToFront();
           startMarker.addTo(instance);
           updateStartMarkerStyles(phase);
           updateRouteStyles(phase);
@@ -127,18 +125,14 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     };
     Object.entries(routeLayers.current).forEach(([routePhase, layer]) => {
       if (!layer) return;
-      if (routePhase === 'Run 1') {
-        layer.setStyle({ color: '#ff1493', opacity: 1, weight: 7, dashArray: undefined });
-        layer.bringToFront();
-        return;
-      }
       const isCurrent = routePhase === currentPhase;
       layer.setStyle({
         color: isCurrent ? colors[routePhase as Phase] : '#87958f',
-        opacity: isCurrent ? 0.9 : 0.35,
-        weight: isCurrent ? 5 : 3,
+        opacity: isCurrent ? 0.95 : 0.35,
+        weight: isCurrent ? 6 : 3,
         dashArray: undefined,
       });
+      if (isCurrent) layer.bringToFront();
     });
     cancelledSwimLayer.current?.setStyle({ color: '#8c8c8c', opacity: 0.45, weight: 5, dashArray: '8 8' });
   }
@@ -151,12 +145,6 @@ export default function MapPanel({ locations, members, activeParticipantId, phas
     };
     Object.entries(startMarkers.current).forEach(([markerPhase, marker]) => {
       if (!marker) return;
-      if (markerPhase === 'Run 1') {
-        marker.setStyle({
-          radius: 11, color: '#191919', weight: 3, fillColor: '#ff1493', fillOpacity: 1,
-        });
-        return;
-      }
       const isCurrent = markerPhase === currentPhase;
       marker.setStyle({
         radius: isCurrent ? 8 : 6,

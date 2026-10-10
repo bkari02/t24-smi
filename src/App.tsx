@@ -96,7 +96,7 @@ const translations = {
     language: 'Language', mode: 'Mode', fan: 'Fan', member: 'Team member', athlete: 'Athlete',
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Reset',
     fanView: 'Fan view', memberView: 'Team member view', athleteView: 'Athlete view',
-    activeViewers: 'active viewers', welcome: 'WELCOME TO TEAM SMI', introTitle: '24 hours, three disciplines, one active team member',
+    activeViewers: 'active viewers', totalDistance: 'covered by the team', welcome: 'WELCOME TO TEAM SMI', introTitle: '24 hours, three disciplines, one active team member',
     introP1: 'We are starting as a team of five in a 24-hour relay triathlon: first 4 hours of swimming, then 12 hours of cycling, and finally 8 hours of running.',
     introP2: 'Only one person is racing at a time. Follow us during the event, join the chat, and send us cheers. Click the “Cheer for ...” button to cheer.',
     officialTime: 'Official start: Saturday, 13:00 · Finish: Sunday, 13:00', dontShow: 'Do not show again',
@@ -120,7 +120,7 @@ const translations = {
     language: 'Sprache', mode: 'Modus', fan: 'Fan', member: 'Teammitglied', athlete: 'Athlet:in',
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Zurücksetzen',
     fanView: 'Fan-Ansicht', memberView: 'Teammitglied-Ansicht', athleteView: 'Athlet:innen-Ansicht',
-    activeViewers: 'aktive Zuschauer:innen', welcome: 'WILLKOMMEN BEI TEAM SMI', introTitle: '24 Stunden, drei Disziplinen, ein aktives Teammitglied',
+    activeViewers: 'aktive Zuschauer:innen', totalDistance: 'vom Team zurückgelegt', welcome: 'WILLKOMMEN BEI TEAM SMI', introTitle: '24 Stunden, drei Disziplinen, ein aktives Teammitglied',
     introP1: 'Wir starten zu fünft bei einem 24-Stunden-Staffel-Triathlon: zuerst 4 Stunden Schwimmen, danach 12 Stunden Radfahren und zum Schluss 8 Stunden Laufen.',
     introP2: 'Es ist immer nur eine Person gleichzeitig im Rennen. Hier könnt ihr uns verfolgen, im Chat mitfiebern und uns anfeuern. Klickt dafür auf den „Cheer for ...“-Button.',
     officialTime: 'Offizieller Start: Samstag, 13:00 Uhr · Ende: Sonntag, 13:00 Uhr', dontShow: 'Nicht mehr anzeigen',
@@ -199,6 +199,7 @@ function App() {
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [scheduleError, setScheduleError] = useState('');
   const [schedulePage, setSchedulePage] = useState(0);
+  const [roundsPage, setRoundsPage] = useState(0);
   const [language, setLanguage] = useState<Language>(() => window.localStorage.getItem('t24-language') === 'de' ? 'de' : 'en');
   const [showEventIntro, setShowEventIntro] = useState(() => !window.localStorage.getItem('t24-event-intro-dismissed'));
   const [dontShowEventIntroAgain, setDontShowEventIntroAgain] = useState(false);
@@ -370,6 +371,7 @@ function App() {
   const activeRound = [...state.rounds].reverse().find((round) => round.participantId === active.id && !round.finishedAt);
   const completedRounds = state.rounds.filter((round) => round.finishedAt);
   const phaseConfig = phases.find((phase) => phase.name === state.phase)!;
+  const totalDistanceKm = completedRounds.reduce((sum, round) => sum + parseFloat(phases.find((item) => item.name === round.phase)?.distance ?? '0'), 0);
   const phaseRounds = completedRounds.filter(
     (round) => round.phase === state.phase && round.participantId === active.id,
   );
@@ -439,6 +441,12 @@ function App() {
   todayStart.setHours(13, 0, 0, 0);
   const secondsUntilTodayStart = (todayStart.getTime() - now) / 1000;
   const schedulePageSize = 8;
+  const roundsPageSize = 6;
+  const phaseOrder = phases.map((item) => item.name);
+  const reversedRounds = [...completedRounds].sort((a, b) => phaseOrder.indexOf(b.phase) - phaseOrder.indexOf(a.phase) || b.number - a.number);
+  const roundsPageCount = Math.max(1, Math.ceil(reversedRounds.length / roundsPageSize));
+  const currentRoundsPage = Math.min(roundsPage, roundsPageCount - 1);
+  const visibleRounds = reversedRounds.slice(currentRoundsPage * roundsPageSize, (currentRoundsPage + 1) * roundsPageSize);
   const remainingSchedule = schedule.filter((item) => new Date(item.end).getTime() >= now);
   const schedulePageCount = Math.max(1, Math.ceil(remainingSchedule.length / schedulePageSize));
   const visibleSchedule = remainingSchedule.slice(schedulePage * schedulePageSize, (schedulePage + 1) * schedulePageSize);
@@ -510,7 +518,7 @@ function App() {
       </div>}
       {cheerCelebration && <div className={`cheer-celebration intensity-${celebrationLevel}`} aria-hidden="true"><strong>KEEP IT SMI!</strong>{Array.from({ length: 48 + celebrationLevel * 18 }, (_, index) => <span key={index} style={{ '--i': index } as CSSProperties} />)}</div>}
       <header className="topbar">
-        <div><label className="language-switcher">{t('language')} <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN · English</option><option value="de">DE · Deutsch</option></select></label><p className="eyebrow">T24 XTREME TRIATHLON · SMIBOARD </p><h2>Never Schmu, always Smi!</h2></div>
+        <div><label className="language-switcher">{t('language')} <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN · English</option><option value="de">DE · Deutsch</option></select></label><p className="eyebrow">T24 XTREME TRIATHLON · SMIBOARD </p><h2>Never Schmu, always Smi!</h2><p className="total-distance"><strong>{totalDistanceKm.toFixed(1)} km</strong><span>{t('totalDistance')} · {completedRounds.length} {t('rounds')}</span></p></div>
         <div className="header-actions">
           <label className="mode-select">{t('mode')}
             <select value={view} onChange={(event) => setView(event.target.value as 'fan' | 'member' | 'athlete')}>
@@ -574,8 +582,8 @@ function App() {
             </div>
           </section>
           <section className="panel planned-schedule"><div className="section-heading"><div><p className="eyebrow">{t('plannedRelay')}</p><h2>{t('tuneIn')}</h2></div><span className="muted">{t('liveOverride')}</span></div>{scheduleError && <p className="sync-message">{scheduleError}</p>}{remainingSchedule.length === 0 ? <p className="empty">{t('noSchedule')}</p> : <><div className="planned-list">{visibleSchedule.map((item) => { const member = state.members.find((candidate) => candidate.name.toLowerCase() === item.participant.toLowerCase()); const isCurrent = item.phase === state.phase && item.participant.toLowerCase() === active.name.toLowerCase(); return <div className={`planned-row ${isCurrent ? 'current' : ''}`} key={`${item.phase}-${item.loop}`}><span className="planned-phase">{item.phase}</span><span className="planned-loop">#{item.loop}</span>{member?.imageUrl ? <img className="participant-avatar" src={member.imageUrl} alt="" /> : <span className="member-dot" style={{ background: member?.color ?? '#999' }} />}<strong>{item.participant}</strong><span className="planned-time">{scheduleDate(item.start, language)} · {scheduleClock(item.start, language)}–{scheduleClock(item.end, language)}</span><b>{item.duration}</b></div>; })}</div><div className="schedule-pagination"><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.max(0, page - 1))} disabled={schedulePage === 0}>{t('previous')}</button><span>{t('page')} {schedulePage + 1} / {schedulePageCount}</span><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.min(schedulePageCount - 1, page + 1))} disabled={schedulePage >= schedulePageCount - 1}>{t('next')}</button></div></>}</section>
-          <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>{t('latestRounds')}</h2></div><span className="muted">{phaseConfig.distance} {t('rounds')}</span></div>{paceError && <p className="sync-message">{paceError}</p>}
-            {completedRounds.length === 0 ? <p className="empty">{t('noRounds')}</p> : <div className="round-list">{completedRounds.slice(-6).reverse().map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>}
+          <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>{t('latestRounds')}</h2></div></div>{paceError && <p className="sync-message">{paceError}</p>}
+            {completedRounds.length === 0 ? <p className="empty">{t('noRounds')}</p> : <><div className="round-list">{visibleRounds.map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}<small className="round-phase">{round.phase} · {phases.find((item) => item.name === round.phase)?.distance}</small></strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>{roundsPageCount > 1 && <div className="schedule-pagination"><button className="refresh-button" onClick={() => setRoundsPage(Math.max(0, currentRoundsPage - 1))} disabled={currentRoundsPage === 0}>{t('previous')}</button><span>{t('page')} {currentRoundsPage + 1} / {roundsPageCount}</span><button className="refresh-button" onClick={() => setRoundsPage(Math.min(roundsPageCount - 1, currentRoundsPage + 1))} disabled={currentRoundsPage >= roundsPageCount - 1}>{t('next')}</button></div>}</>}
           </section>
           <section className="panel team-introduction">
             <div className="team-intro-hero">
