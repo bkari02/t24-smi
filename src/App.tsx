@@ -145,9 +145,16 @@ const translations = {
 function parseSchedule(csv: string): ScheduleItem[] {
   return csv.trim().split(/\r?\n/).slice(1).map((row) => {
     const [discipline, loop, participant, start, end, duration] = row.split(',').map((value) => value.trim());
-    const phase: Phase = discipline === 'Swimming' ? 'Run 1' : discipline === 'Cycling' ? 'Bike' : 'Run 2';
+    const phase: Phase | undefined = discipline === 'Run 1' || discipline === 'Swimming'
+      ? 'Run 1'
+      : discipline === 'Bike' || discipline === 'Cycling'
+        ? 'Bike'
+        : discipline === 'Run 2' || discipline === 'Running'
+          ? 'Run 2'
+          : undefined;
+    if (!phase || !start || !end) return undefined;
     return { phase, loop: Number(loop), participant, start: start.replace(' ', 'T'), end: end.replace(' ', 'T'), duration };
-  }).filter((item) => Number.isFinite(item.loop) && item.participant);
+  }).filter((item): item is ScheduleItem => item !== undefined && Number.isFinite(item.loop) && Boolean(item.participant));
 }
 
 function scheduleClock(iso: string, language: Language) {
