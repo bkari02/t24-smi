@@ -572,11 +572,6 @@ function App() {
 
   return (
     <main>
-      {secondsUntilTodayStart > 0 && <div className="start-countdown-banner" role="status">
-        <span className="eyebrow">{t('startCountdown')}</span>
-        <strong>{t('startsIn')} {formatCountdown(secondsUntilTodayStart)}</strong>
-        <span>{t('officialStart')} · {t('raceChange')}</span>
-      </div>}
       <div className="race-change-banner" role="status">
         <span className="eyebrow">{t('raceChange')}</span>
         <strong>{t('raceNotice')}</strong>
