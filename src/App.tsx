@@ -97,7 +97,7 @@ const translations = {
     language: 'Language', mode: 'Mode', fan: 'Fan', member: 'Team member', athlete: 'Athlete',
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Reset',
     fanView: 'Fan view', memberView: 'Team member view', athleteView: 'Athlete view',
-    activeViewers: 'active viewers', elevationProfile: 'ELEVATION PROFILE', ascent: 'Ascent', lowest: 'Lowest', highest: 'Highest', lapDistance: 'Lap', onCourse: 'active athlete', totalDistance: 'covered by the team', welcome: 'WELCOME TO TEAM SMI', introTitle: '24 hours, three disciplines, one active team member',
+    activeViewers: 'active viewers', elevationProfile: 'ELEVATION PROFILE', ascent: 'Ascent', lowest: 'Lowest', highest: 'Highest', lapDistance: 'Lap', onCourse: 'active athlete', locationAge: 'GPS', locationReceived: 'received', totalDistance: 'covered by the team', welcome: 'WELCOME TO TEAM SMI', introTitle: '24 hours, three disciplines, one active team member',
     athleteAccess: 'ATHLETE ACCESS', chooseAthlete: 'Choose athlete', athletePassword: 'Password', athleteUnlock: 'Open athlete view', athletePasswordHint: 'Enter password', athleteLoginError: 'Wrong athlete password.', athleteCheers: 'YOUR CHEERS', cheersTotal: 'total cheers', cheerTimeline: 'CHEERS OVER TIME', noCheers: 'No cheers yet.', askAthlete: 'ASK THE ATHLETE', askQuestion: 'Ask the active athlete', askerName: 'Your name', question: 'Question', sendQuestion: 'Send question', questionSent: 'Question sent — athlete will see it soon. Maybe it will appear on the blackboard soon.', questionsWaiting: 'QUESTIONS WAITING', answerQuestion: 'Answer question', answer: 'Answer', publishAnswer: 'Publish answer', blackboard: 'ATHLETE BLACKBOARD', noQuestions: 'No answered questions yet.',
     introP1: 'We are starting as a team of five in a 24-hour relay triathlon: first 4 hours of swimming, then 12 hours of cycling, and finally 8 hours of running.',
     introP2: 'Only one person is racing at a time. Follow us during the event, join the chat, and send us cheers. Click the “Cheer for ...” button to cheer.',
@@ -122,7 +122,7 @@ const translations = {
     language: 'Sprache', mode: 'Modus', fan: 'Fan', member: 'Teammitglied', athlete: 'Athlet:in',
     cheerFor: 'Cheer for', lightMode: 'light mode', darkMode: 'dark mode', reset: 'Zurücksetzen',
     fanView: 'Fan-Ansicht', memberView: 'Teammitglied-Ansicht', athleteView: 'Athlet:innen-Ansicht',
-    activeViewers: 'aktive Zuschauer:innen', elevationProfile: 'HÖHENPROFIL', ascent: 'Anstieg', lowest: 'Tiefster Punkt', highest: 'Höchster Punkt', lapDistance: 'Runde', onCourse: 'aktive:r Athlet:in', totalDistance: 'vom Team zurückgelegt', welcome: 'WILLKOMMEN BEI TEAM SMI', introTitle: '24 Stunden, drei Disziplinen, ein aktives Teammitglied',
+    activeViewers: 'aktive Zuschauer:innen', elevationProfile: 'HÖHENPROFIL', ascent: 'Anstieg', lowest: 'Tiefster Punkt', highest: 'Höchster Punkt', lapDistance: 'Runde', onCourse: 'aktive:r Athlet:in', locationAge: 'GPS', locationReceived: 'empfangen', totalDistance: 'vom Team zurückgelegt', welcome: 'WILLKOMMEN BEI TEAM SMI', introTitle: '24 Stunden, drei Disziplinen, ein aktives Teammitglied',
     athleteAccess: 'ATHLETEN-ZUGANG', chooseAthlete: 'Athlet:in auswählen', athletePassword: 'Passwort', athleteUnlock: 'Athleten-Ansicht öffnen', athletePasswordHint: 'Passwort eingeben', athleteLoginError: 'Falsches Athleten-Passwort.', athleteCheers: 'DEINE CHEERS', cheersTotal: 'Cheers gesamt', cheerTimeline: 'CHEERS IM ZEITVERLAUF', noCheers: 'Noch keine Cheers.', askAthlete: 'ASK THE ATHLETE', askQuestion: 'Aktive:n Athlet:in fragen', askerName: 'Dein Name', question: 'Frage', sendQuestion: 'Frage senden', questionSent: 'Frage gesendet — Athlet sieht sie bald. Vielleicht erscheint sie bald auf dem Blackboard.', questionsWaiting: 'OFFENE FRAGEN', answerQuestion: 'Frage beantworten', answer: 'Antwort', publishAnswer: 'Antwort veröffentlichen', blackboard: 'ATHLETEN-BLACKBOARD', noQuestions: 'Noch keine beantworteten Fragen.',
     introP1: 'Wir starten zu fünft bei einem 24-Stunden-Staffel-Triathlon: zuerst 4 Stunden Schwimmen, danach 12 Stunden Radfahren und zum Schluss 8 Stunden Laufen.',
     introP2: 'Es ist immer nur eine Person gleichzeitig im Rennen. Hier könnt ihr uns verfolgen, im Chat mitfiebern und uns anfeuern. Klickt dafür auf den „Cheer for ...“-Button.',
@@ -344,7 +344,7 @@ function App() {
       loadLatestLocations()
       .then((locations) => {
         if (!cancelled) {
-          setState((current) => ({ ...current, locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }));
+          mergeLocations(locations);
           setLastLocationSync(new Date());
           setSyncMessage('');
         }
@@ -355,20 +355,28 @@ function App() {
       .finally(() => setLocationSyncing(false));
     };
     refreshLocations();
-    const refreshTimer = window.setInterval(refreshLocations, 30000);
+    const refreshTimer = window.setInterval(refreshLocations, 10000);
     const channel = client
       .channel(`locations-${eventId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'locations',
         filter: `event_id=eq.${eventId}`,
       }, (payload) => {
-        const row = payload.new as { participant_id: string; latitude: number; longitude: number; accuracy: number | null; recorded_at: string };
+        const row = payload.new as { participant_id: string; latitude: number; longitude: number; accuracy: number | null; recorded_at: string; received_at: string };
         const location = {
           participantId: row.participant_id,
           latitude: row.latitude, longitude: row.longitude,
-          accuracy: row.accuracy ?? undefined, recordedAt: row.recorded_at,
+          accuracy: row.accuracy ?? undefined, recordedAt: row.recorded_at, receivedAt: row.received_at,
         };
-        setState((current) => ({ ...current, locations: { ...current.locations, [location.participantId]: location } }));
+        setState((current) => {
+          const previous = current.locations[location.participantId];
+          if (previous
+            && new Date(previous.recordedAt).getTime() >= new Date(location.recordedAt).getTime()
+            && new Date(previous.receivedAt ?? previous.recordedAt).getTime() >= new Date(location.receivedAt ?? location.recordedAt).getTime()) {
+            return current;
+          }
+          return { ...current, locations: { ...current.locations, [location.participantId]: location } };
+        });
         setLastLocationSync(new Date());
       })
       .subscribe();
@@ -406,6 +414,22 @@ function App() {
     setState((current) => ({ ...current, ...patch }));
   }
 
+  function mergeLocations(locations: Location[]) {
+    setState((current) => {
+      const next = { ...current.locations };
+      locations.forEach((location) => {
+        const previous = next[location.participantId];
+        if (!previous
+          || new Date(location.recordedAt).getTime() > new Date(previous.recordedAt).getTime()
+          || (new Date(location.recordedAt).getTime() === new Date(previous.recordedAt).getTime()
+            && new Date(location.receivedAt ?? location.recordedAt).getTime() > new Date(previous.receivedAt ?? previous.recordedAt).getTime())) {
+          next[location.participantId] = location;
+        }
+      });
+      return { ...current, locations: next };
+    });
+  }
+
   async function performMutation(action: Parameters<typeof mutateEvent>[0], nextParticipantId?: string, phase?: Phase) {
     if (!supabase) return;
     setMutationPending(true);
@@ -438,7 +462,13 @@ function App() {
 
   const activeLocation = state.locations[active.id];
   const athleteLocation = state.locations[athlete.id];
-  const locationAge = activeLocation ? Math.round((now - new Date(activeLocation.recordedAt).getTime()) / 1000) : undefined;
+  const locationAge = activeLocation ? Math.max(0, Math.round((now - new Date(activeLocation.recordedAt).getTime()) / 1000)) : undefined;
+  const locationReceivedAge = activeLocation?.receivedAt ? Math.max(0, Math.round((now - new Date(activeLocation.receivedAt).getTime()) / 1000)) : undefined;
+  const formatLocationAge = (age: number) => age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`;
+  const locationAgeLabel = locationAge === undefined
+    ? undefined
+    : formatLocationAge(locationAge);
+  const locationReceivedAgeLabel = locationReceivedAge === undefined ? undefined : formatLocationAge(locationReceivedAge);
   const startLabel = activeRound ? `Round ${activeRound.number} in progress` : 'Start next round';
   const estimatedFinish = activeRound && typicalDuration
     ? new Date(new Date(activeRound.startedAt).getTime() + typicalDuration * 1000)
@@ -614,7 +644,7 @@ function App() {
       {sharedLoading && <p className="sync-message">{t('loading')}</p>}
       {syncMessage && <p className="sync-message">{syncMessage}</p>}
       <>
-          <section className="panel map-panel map-priority"><div className="section-heading"><div><p className="eyebrow">{t('liveMap')}</p><h2>{Object.keys(state.locations).length ? t('allParticipants') : t('coursePreview')}</h2></div><div className="map-actions"><span className="map-live-indicator">{t('nowActive')} <span className="member-dot" style={{ background: active.color }} />{active.name} · {state.phase}</span><button className="refresh-button" onClick={() => loadLatestLocations().then((locations) => { update({ locations: Object.fromEntries(locations.map((location) => [location.participantId, location])) }); setLastLocationSync(new Date()); }).catch((error: Error) => setSyncMessage(`Location refresh failed: ${error.message}`))} disabled={locationSyncing}>{locationSyncing ? t('refreshing') : t('refresh')}</button>{lastLocationSync && <span className="status">{t('updated')} {Math.max(0, Math.round((now - lastLocationSync.getTime()) / 1000))}s ago</span>}</div></div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} /></section>
+          <section className="panel map-panel map-priority"><div className="section-heading"><div><p className="eyebrow">{t('liveMap')}</p><h2>{Object.keys(state.locations).length ? t('allParticipants') : t('coursePreview')}</h2></div><div className="map-actions"><span className="map-live-indicator">{t('nowActive')} <span className="member-dot" style={{ background: active.color }} />{active.name} · {state.phase}{locationAgeLabel && <small className="location-age">· {t('locationAge')} {locationAgeLabel} ago{locationReceivedAgeLabel && ` · ${t('locationReceived')} ${locationReceivedAgeLabel} ago`}</small>}</span><button className="refresh-button" onClick={() => loadLatestLocations().then((locations) => { mergeLocations(locations); setLastLocationSync(new Date()); }).catch((error: Error) => setSyncMessage(`Location refresh failed: ${error.message}`))} disabled={locationSyncing}>{locationSyncing ? t('refreshing') : t('refresh')}</button>{lastLocationSync && <span className="status">{t('updated')} {Math.max(0, Math.round((now - lastLocationSync.getTime()) / 1000))}s ago</span>}</div></div><MapPanel locations={state.locations} members={state.members} activeParticipantId={active.id} phase={state.phase} focusedParticipantId={focusedParticipantId} /></section>
           <ElevationProfile currentPhase={state.phase} location={activeLocation} labels={{ title: t('elevationProfile'), ascent: t('ascent'), lowest: t('lowest'), highest: t('highest'), distance: t('lapDistance'), you: t('onCourse') }} />
           <section className="hero-grid">
             <div className="phase-card">

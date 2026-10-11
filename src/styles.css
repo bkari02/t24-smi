@@ -186,6 +186,7 @@ select { min-width: 130px; border: 2px solid var(--canvas); border-radius: 0; ba
 .map-actions { display: flex; align-items: center; gap: 10px; }
 .map-live-indicator { display: inline-flex; align-items: center; gap: 7px; color: #6d6a63; font-size: 11px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 .map-live-indicator .member-dot { width: 10px; height: 10px; }
+.location-age { font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .refresh-button { border: 2px solid #191919; border-radius: 0; background: #f6c85f; color: #191919; padding: 7px 11px; font-size: 10px; font-weight: 900; text-transform: uppercase; }
 .refresh-button:disabled { cursor: wait; opacity: .55; }
 .map-panel { min-height: 390px; }

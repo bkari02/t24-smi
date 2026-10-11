@@ -188,6 +188,7 @@ type LocationRow = {
   longitude: number;
   accuracy: number | null;
   recorded_at: string;
+  received_at: string;
 };
 
 export function fromLocationRow(row: LocationRow): Location {
@@ -196,7 +197,7 @@ export function fromLocationRow(row: LocationRow): Location {
     latitude: row.latitude,
     longitude: row.longitude,
     accuracy: row.accuracy ?? undefined,
-    recordedAt: row.recorded_at,
+    recordedAt: row.recorded_at, receivedAt: row.received_at,
   };
 }
 
@@ -204,7 +205,7 @@ export async function loadLatestLocations(): Promise<Location[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from('locations')
-    .select('participant_id, latitude, longitude, accuracy, recorded_at')
+    .select('participant_id, latitude, longitude, accuracy, recorded_at, received_at')
     .eq('event_id', eventId)
     .order('recorded_at', { ascending: false })
     .limit(100);

@@ -22,6 +22,7 @@ export type Location = {
   longitude: number;
   accuracy?: number;
   recordedAt: string;
+  receivedAt?: string;
 };
 
 export type EventState = {
