@@ -3,6 +3,7 @@ import MapPanel from './MapPanel';
 import EventChat from './EventChat';
 import ElevationProfile from './ElevationProfile';
 import { EventState, Location, Phase, Round } from './types';
+import { AthletePerformance, buildAthletePerformance, distanceForPhase, isSharedRound } from './athletePerformance';
 import { answerAthleteQuestion, AthleteQuestion, eventId, hasMemberSession, loadActiveViewerCount, loadCheerHourly, loadCheerSummary, loadCheerTimeline, loadLatestLocations, loadPendingAthleteQuestions, loadPublishedAthleteQuestions, loadSharedState, mutateEvent, recordCheer, recordViewerHeartbeat, startMemberSession, submitAthleteQuestion, supabase } from './supabase';
 import { loadRouteProgress, RouteProgress } from './routeProgress';
 
@@ -70,6 +71,13 @@ function formatDurationWithSeconds(seconds: number) {
   return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(remainder).padStart(2, '0')}s`;
 }
 
+function formatPace(value: number | undefined, phase: Phase) {
+  if (value === undefined) return '--';
+  if (phase === 'Bike') return `${value.toFixed(1)} km/h`;
+  const totalSeconds = Math.round(value * 60);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')} min/km`;
+}
+
 function formatClock(iso?: string, withSeconds = false) {
   return iso
     ? new Date(iso).toLocaleTimeString([], {
@@ -78,6 +86,97 @@ function formatClock(iso?: string, withSeconds = false) {
       ...(withSeconds ? { second: '2-digit' } : {}),
     })
     : '--:--';
+}
+
+function drawAchievementCard(athlete: { name: string; imageUrl?: string }, performance: AthletePerformance, cheers: number, labels: {
+  measuredTime: string; totalDistance: string; rounds: string; fansCheered: string; duringT24: string; event: string; footer: string;
+}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas is unavailable');
+  context.shadowColor = '#191919';
+  context.shadowBlur = 0;
+  context.shadowOffsetX = 18;
+  context.shadowOffsetY = 18;
+  context.fillStyle = '#fff8e8';
+  context.beginPath();
+  context.roundRect(24, 24, 1032, 1270, 34);
+  context.fill();
+  context.shadowColor = 'transparent';
+  context.save();
+  context.beginPath();
+  context.roundRect(24, 24, 1032, 1270, 34);
+  context.clip();
+  context.fillStyle = '#191919';
+  context.fillRect(0, 0, canvas.width, 22);
+  context.fillStyle = '#e7422e';
+  context.fillRect(0, 22, 250, 18);
+  context.fillStyle = '#191919';
+  context.font = '900 28px Arial';
+  context.fillText('TEAM SMI', 72, 112);
+  context.font = '900 22px Arial';
+  context.fillText(labels.event, 72, 148);
+  context.font = '900 92px Arial';
+  context.fillText(athlete.name.toUpperCase(), 72, 280);
+  context.shadowColor = '#191919';
+  context.shadowOffsetX = 10;
+  context.shadowOffsetY = 10;
+  context.fillStyle = '#f6c85f';
+  context.fillRect(72, 335, 936, 245);
+  context.shadowColor = 'transparent';
+  context.strokeStyle = '#191919';
+  context.lineWidth = 5;
+  context.strokeRect(72, 335, 936, 245);
+  context.fillStyle = '#191919';
+  context.font = '900 132px Arial';
+  context.fillText(`${performance.totalDistanceKm.toFixed(1)}`, 112, 482);
+  context.font = '900 34px Arial';
+  context.fillText('KM', 116, 535);
+  context.font = '900 24px Arial';
+  context.fillText(labels.totalDistance.toUpperCase(), 620, 432);
+  context.fillText(`${performance.rounds.length} ${labels.rounds}`, 620, 478);
+  context.fillText(`${formatDuration(performance.measuredSeconds)} ${labels.measuredTime}`, 620, 524);
+  context.fillStyle = '#191919';
+  context.font = '900 26px Arial';
+  context.fillText('PHASE BREAKDOWN', 72, 660);
+  performance.phases.filter((phase) => phase.rounds > 0).forEach((phase, index) => {
+    const y = 730 + index * 104;
+    context.fillStyle = ['#f26b4f', '#4cc9a4', '#91a7ff'][index % 3];
+    context.fillRect(72, y - 32, 18, 70);
+    context.fillStyle = '#191919';
+    context.font = '900 28px Arial';
+    context.fillText(phase.phase.toUpperCase(), 116, y);
+    context.font = '700 24px Arial';
+    context.fillText(`${phase.distanceKm.toFixed(1)} km · ${phase.rounds} ${labels.rounds}`, 450, y);
+    if (phase.averageValue !== undefined) {
+      context.font = '900 24px Arial';
+      context.fillText(formatPace(phase.averageValue, phase.phase), 450, y + 34);
+    }
+  });
+  context.fillStyle = '#6d6a63';
+  context.font = '700 22px Arial';
+  context.fillText(`${labels.fansCheered} ${cheers} ${labels.duringT24}`, 72, 1090);
+  context.fillStyle = '#e7422e';
+  context.font = '900 46px Arial';
+  context.fillText(labels.footer, 72, 1240);
+  context.restore();
+  return new Promise<void>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('Could not export canvas'));
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `team-smi-${athlete.name.toLowerCase()}-performance.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+      resolve();
+    }, 'image/png');
+  });
 }
 
 type ScheduleItem = {
@@ -109,6 +208,7 @@ const translations = {
     basedOn: 'Based on', recentLaps: 'recent phase laps', csvEstimate: 'CSV estimate', yourTrack: 'YOUR TRACK POSITION', cancelledSwim: 'Swim cancelled · bad water quality',
     startCountdown: 'COUNTDOWN TO START', startsIn: 'Starts in', officialStart: 'Official start today at 13:00', raceChange: 'Swimming cancelled — Run 1 (2.5 km) instead', raceNotice: 'Swimming has been cancelled due to water quality issues. Another 4 hours of running are planned instead.',
     completed: 'completed', remaining: 'remaining', approxProgress: 'approx. progress', gpsNote: 'GPS route progress is approximate and based on the nearest course point.',
+    performance: 'YOUR PERFORMANCE', totalDistanceShort: 'total distance', measuredTime: 'measured active time', average: 'average', measuredRounds: 'measured rounds', sharedEffort: 'shared team effort', paceExcluded: 'duration excluded from averages', fansCheered: 'Fans cheered for you', duringT24: 'times during T24', asked: 'asked', exportCard: 'Export achievement card', exportFailed: 'Could not create the achievement card.',
     finishRound: 'Finish round', startNext: 'Start next round', nextUp: 'Next up', handover: 'Handover', teamAccess: 'TEAM ACCESS',
     enterPassword: 'Enter team password', sharedPassword: 'Shared password', unlock: 'Unlock controls', loading: 'Loading shared race state…',
     activeNext: 'Active & next', restingOrder: 'Resting order', longestRest: 'Longest rest first', active: 'Active', ready: 'Ready',
@@ -134,6 +234,7 @@ const translations = {
     basedOn: 'Basierend auf', recentLaps: 'aktuellen Runden', csvEstimate: 'CSV-Schätzung', yourTrack: 'DEINE STRECKENPOSITION', cancelledSwim: 'Schwimmen abgesagt · schlechte Wasserqualität',
     startCountdown: 'COUNTDOWN BIS ZUM START', startsIn: 'Start in', officialStart: 'Offizieller Start heute um 13:00 Uhr', raceChange: 'Schwimmen abgesagt — stattdessen Run 1 (2,5 km)', raceNotice: 'Das Schwimmen wurde wegen Problemen mit der Wasserqualität abgesagt. Stattdessen sind weitere 4 Stunden Laufen geplant.',
     completed: 'absolviert', remaining: 'verbleibend', approxProgress: 'ca. Fortschritt', gpsNote: 'Der GPS-Fortschritt ist eine Näherung anhand des nächstgelegenen Streckenpunkts.',
+    performance: 'DEINE LEISTUNG', totalDistanceShort: 'Gesamtdistanz', measuredTime: 'gemessene aktive Zeit', average: 'Durchschnitt', measuredRounds: 'gemessene Runden', sharedEffort: 'gemeinsame Teamleistung', paceExcluded: 'Dauer nicht in Durchschnitte eingerechnet', fansCheered: 'Fans haben dich', duringT24: 'Mal beim T24 angefeuert', asked: 'fragte', exportCard: 'Erfolgskarte exportieren', exportFailed: 'Erfolgskarte konnte nicht erstellt werden.',
     finishRound: 'Runde beenden', startNext: 'Nächste Runde starten', nextUp: 'Als Nächstes geplant', handover: 'Wechsel', teamAccess: 'TEAMZUGANG',
     enterPassword: 'Team-Passwort eingeben', sharedPassword: 'Gemeinsames Passwort', unlock: 'Steuerung freischalten', loading: 'Gemeinsamen Rennstatus laden…',
     activeNext: 'Aktiv & als Nächstes', restingOrder: 'Pause / Im Camp', longestRest: 'Längste Pause zuerst', active: 'Aktiv', ready: 'Bereit',
@@ -500,6 +601,7 @@ function App() {
   const remainingSchedule = schedule.filter((item) => new Date(item.end).getTime() >= now);
   const schedulePageCount = Math.max(1, Math.ceil(remainingSchedule.length / schedulePageSize));
   const visibleSchedule = remainingSchedule.slice(schedulePage * schedulePageSize, (schedulePage + 1) * schedulePageSize);
+  const athletePerformance = buildAthletePerformance(state.rounds, athlete.id);
 
   useEffect(() => {
     if (view !== 'athlete') return;
@@ -593,6 +695,18 @@ function App() {
       .finally(() => setQuestionPending(false));
   }
 
+  function exportAthleteCard() {
+    void drawAchievementCard(athlete, athletePerformance, cheers[athlete.id] ?? 0, {
+      measuredTime: t('measuredTime'),
+      totalDistance: t('totalDistanceShort'),
+      rounds: t('rounds'),
+      fansCheered: t('fansCheered'),
+      duringT24: t('duringT24'),
+      event: 'T24 XTREME TRIATHLON',
+      footer: 'NEVER SCHMU, ALWAYS SMI!',
+    }).catch(() => setSyncMessage(t('exportFailed')));
+  }
+
   function focusParticipant(id: string) {
     setFocusedParticipantId(id);
     document.querySelector('.map-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -663,7 +777,7 @@ function App() {
               {estimatedFinish && typicalDuration !== undefined && estimatedFinishIn !== undefined && <p className="estimate">{t('estimatedFinish')} {formatClock(estimatedFinish.toISOString(), true)}<span className="estimate-countdown">in {formatDurationWithSeconds(estimatedFinishIn)}</span><small>{t('basedOn')} · {estimateSource === 'CSV estimate' ? t('csvEstimate') : t('recentLaps')} · {formatDurationWithSeconds(typicalDuration)}</small></p>}
             </div>
           </section>
-          {athleteAccess && <><section className="panel athlete-panel"><p className="eyebrow">{t('yourTrack')}</p><h2>{athlete.name}</h2><div className="athlete-stats"><strong>{routeProgress ? `${routeProgress.completedKm.toFixed(1)} km` : '—'}</strong><span>{t('completed')}</span><strong>{routeProgress ? `${routeProgress.remainingKm.toFixed(1)} km` : '—'}</strong><span>{t('remaining')}</span><strong>{routeProgress ? `${Math.round(routeProgress.percent)}%` : '—'}</strong><span>{t('approxProgress')}</span></div><p className="muted">{t('gpsNote')}</p></section><section className="panel athlete-questions"><div className="section-heading"><div><p className="eyebrow">{t('questionsWaiting')}</p><h2>{t('answerQuestion')}</h2></div><span className="muted">{pendingQuestions.length}</span></div>{pendingQuestions.length === 0 ? <p className="empty">{t('noQuestions')}</p> : pendingQuestions.map((item) => <article className="athlete-question" key={item.id}><p><strong>{item.askerName}</strong> · {item.question}</p><textarea value={answerDrafts[item.id] ?? ''} onChange={(event) => setAnswerDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder={t('answer')} maxLength={500} /><button className="refresh-button" disabled={questionPending || !answerDrafts[item.id]?.trim()} onClick={() => publishAnswer(item)}>{t('publishAnswer')}</button></article>)}</section><section className="panel athlete-cheers"><div className="section-heading"><div><p className="eyebrow">{t('athleteCheers')}</p><h2>{athlete.name}</h2></div><strong className="athlete-cheer-total">{cheers[athlete.id] ?? 0} {t('cheersTotal')}</strong></div>{athleteCheerTimeline.length === 0 ? <p className="empty">{t('noCheers')}</p> : <><p className="eyebrow">{t('cheerTimeline')}</p><div className="athlete-cheer-chart">{athleteCheerTimeline.map((item) => <div className="athlete-cheer-bar" key={item.bucket} title={`${formatClock(item.bucket)} · ${item.total}`}><i style={{ height: `${Math.max(8, (item.total / maxAthleteCheer) * 100)}%` }} /><span>{formatClock(item.bucket)}</span></div>)}</div></>}</section></>}
+          {athleteAccess && <><section className="panel athlete-panel"><p className="eyebrow">{t('yourTrack')}</p><h2>{athlete.name}</h2><div className="athlete-stats"><strong>{routeProgress ? `${routeProgress.completedKm.toFixed(1)} km` : '—'}</strong><span>{t('completed')}</span><strong>{routeProgress ? `${routeProgress.remainingKm.toFixed(1)} km` : '—'}</strong><span>{t('remaining')}</span><strong>{routeProgress ? `${Math.round(routeProgress.percent)}%` : '—'}</strong><span>{t('approxProgress')}</span></div><p className="muted">{t('gpsNote')}</p></section><section className="panel athlete-performance"><div className="section-heading"><div><p className="eyebrow">{t('performance')}</p><h2>{athlete.name}</h2></div><button className="refresh-button" onClick={exportAthleteCard}>{t('exportCard')}</button></div><div className="performance-summary"><div><strong>{athletePerformance.totalDistanceKm.toFixed(1)} km</strong><span>{t('totalDistanceShort')}</span></div><div><strong>{athletePerformance.rounds.length}</strong><span>{t('rounds')}</span></div><div><strong>{formatDuration(athletePerformance.measuredSeconds)}</strong><span>{t('measuredTime')}</span></div></div><div className="performance-phases">{athletePerformance.phases.filter((phase) => phase.rounds > 0).map((phase) => <div className="performance-phase" key={phase.phase}><div><strong>{phase.phase}</strong><span>{phase.rounds} {t('rounds')} · {phase.distanceKm.toFixed(1)} km</span></div><b>{phase.averageValue === undefined ? '—' : formatPace(phase.averageValue, phase.phase)}</b></div>)}</div>{athletePerformance.rounds.length === 0 ? <p className="empty">{t('noRounds')}</p> : <div className="athlete-round-list">{athletePerformance.rounds.map((round) => { const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; const shared = isSharedRound(round); const pace = shared ? t('paceExcluded') : formatPace(distanceForPhase(round.phase) / duration * (round.phase === 'Bike' ? 3600 : 60), round.phase); return <div className="athlete-round-item" key={round.id}><div><strong>{round.phase} · #{round.number}</strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)} · {distanceForPhase(round.phase).toFixed(1)} km</span></div><div><b>{formatDurationWithSeconds(duration)}</b><small>{shared ? `${t('sharedEffort')} · ${pace}` : pace}</small></div></div>; })}</div>}</section><section className="panel athlete-questions"><div className="section-heading"><div><p className="eyebrow">{t('questionsWaiting')}</p><h2>{t('answerQuestion')}</h2></div><span className="muted">{pendingQuestions.length}</span></div>{pendingQuestions.length === 0 ? <p className="empty">{t('noQuestions')}</p> : pendingQuestions.map((item) => <article className="athlete-question" key={item.id}><p><strong>{item.askerName}</strong> · {item.question}</p><textarea value={answerDrafts[item.id] ?? ''} onChange={(event) => setAnswerDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder={t('answer')} maxLength={500} /><button className="refresh-button" disabled={questionPending || !answerDrafts[item.id]?.trim()} onClick={() => publishAnswer(item)}>{t('publishAnswer')}</button></article>)}</section><section className="panel athlete-cheers"><div className="section-heading"><div><p className="eyebrow">{t('athleteCheers')}</p><h2>{athlete.name}</h2></div><strong className="athlete-cheer-total">{cheers[athlete.id] ?? 0} {t('cheersTotal')}</strong></div>{athleteCheerTimeline.length === 0 ? <p className="empty">{t('noCheers')}</p> : <><p className="eyebrow">{t('cheerTimeline')}</p><div className="athlete-cheer-chart">{athleteCheerTimeline.map((item) => <div className="athlete-cheer-bar" key={item.bucket} title={`${formatClock(item.bucket)} · ${item.total}`}><i style={{ height: `${Math.max(8, (item.total / maxAthleteCheer) * 100)}%` }} /><span>{formatClock(item.bucket)}</span></div>)}</div></>}</section></>}
           {canControl && <section className="control-panel">
             <button className="primary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={activeRound ? finishRound : startRound}>{activeRound ? t('finishRound') : t('startNext')}</button>
             <div className="handover-row"><label htmlFor="next">{t('nextUp')}</label><select id="next" value={state.nextParticipantId} onChange={(event) => setNext(event.target.value)} disabled={mutationPending}>{state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><button className="secondary-button" disabled={mutationPending || sharedLoading || !supabase} onClick={handover}>{t('handover')} {next.name}</button></div>
@@ -705,7 +819,7 @@ function App() {
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>{t('latestRounds')}</h2></div></div>{paceError && <p className="sync-message">{paceError}</p>}
             {completedRounds.length === 0 ? <p className="empty">{t('noRounds')}</p> : <><div className="round-list">{visibleRounds.map((round) => { const roundMembers = (round.participantIds.length > 0 ? round.participantIds : [round.participantId]).map((id) => state.members.find((item) => item.id === id)?.name ?? id); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{roundMembers.join(' · ')}<small className="round-phase">{round.phase} · {phases.find((item) => item.name === round.phase)?.distance}</small></strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>{roundsPageCount > 1 && <div className="schedule-pagination"><button className="refresh-button" onClick={() => setRoundsPage(Math.max(0, currentRoundsPage - 1))} disabled={currentRoundsPage === 0}>{t('previous')}</button><span>{t('page')} {currentRoundsPage + 1} / {roundsPageCount}</span><button className="refresh-button" onClick={() => setRoundsPage(Math.min(roundsPageCount - 1, currentRoundsPage + 1))} disabled={currentRoundsPage >= roundsPageCount - 1}>{t('next')}</button></div>}</>}
           </section>
-          <section className="panel athlete-blackboard"><div className="section-heading"><div><p className="eyebrow">{t('blackboard')}</p><h2>{t('askAthlete')}</h2></div><span className="muted">{publishedQuestions.length}</span></div>{publishedQuestions.length === 0 ? <p className="empty">{t('noQuestions')}</p> : <div className="blackboard-list">{publishedQuestions.map((item) => { const member = state.members.find((candidate) => candidate.id === item.participantId); return <article className="blackboard-entry" key={item.id}><p className="blackboard-meta">{member?.name ?? item.participantId} · {item.askerName}</p><p className="blackboard-question">“{item.question}”</p><p className="blackboard-answer">{item.answer}</p></article>; })}</div>}</section>
+          <section className="panel athlete-blackboard"><div className="section-heading"><div><p className="eyebrow">{t('blackboard')}</p><h2>{t('askAthlete')}</h2></div><span className="muted">{publishedQuestions.length}</span></div>{publishedQuestions.length === 0 ? <p className="empty">{t('noQuestions')}</p> : <div className="blackboard-list">{publishedQuestions.map((item) => { const member = state.members.find((candidate) => candidate.id === item.participantId); return <article className="blackboard-entry" key={item.id}><p className="blackboard-meta">{item.askerName} {t('asked')} {member?.name ?? item.participantId}</p><p className="blackboard-question">“{item.question}”</p><p className="blackboard-answer">{item.answer}</p></article>; })}</div>}</section>
           <section className="panel team-introduction">
             <div className="team-intro-hero">
               <img className="team-photo" src="/data/team.JPEG" alt="Team Smi at the 24-hour triathlon" />

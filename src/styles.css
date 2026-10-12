@@ -60,14 +60,24 @@ main { max-width: 1280px; margin: 0 auto; padding: 22px 26px 18px; }
 .athlete-question { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .athlete-question p { margin-bottom: 8px; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .athlete-question textarea { min-height: 76px; margin-bottom: 8px; resize: vertical; }
-.athlete-blackboard { margin-top: 22px; background: #191919; color: #fff8e8; }
-.athlete-blackboard h2, .athlete-blackboard .muted { color: #fff8e8; }
+.panel.athlete-blackboard { margin-top: 22px; background: var(--panel); color: var(--ink); }
+.athlete-blackboard h2, .athlete-blackboard .muted { color: var(--ink); }
 .blackboard-list { display: grid; gap: 12px; margin-top: 14px; }
 .blackboard-entry { border: 2px solid #f6c85f; padding: 12px; }
-.blackboard-meta { margin: 0 0 6px; color: #f6c85f; font-size: 10px; font-weight: 900; text-transform: uppercase; }
+.blackboard-meta { margin: 0 0 6px; color: #a83a24; font-size: 10px; font-weight: 900; text-transform: uppercase; }
 .blackboard-question, .blackboard-answer { margin: 4px 0; line-height: 1.45; }
-.blackboard-question { color: #fff8e8; font-weight: 800; }
+.blackboard-question { color: var(--ink); font-weight: 800; }
 .blackboard-answer { color: #4cc9a4; }
+:root[data-theme='dark'] .athlete-blackboard {
+  background: #191919;
+  color: #fff8e8;
+}
+:root[data-theme='dark'] .athlete-blackboard h2,
+:root[data-theme='dark'] .athlete-blackboard .muted,
+:root[data-theme='dark'] .athlete-blackboard .blackboard-question {
+  color: #fff8e8;
+}
+:root[data-theme='dark'] .athlete-blackboard .blackboard-meta { color: #f6c85f; }
 .topbar > div { max-width: 800px; }
 .total-distance { display: inline-flex; align-items: baseline; gap: 10px; margin: 14px 0 0; border: 2px solid var(--ink); background: #f6c85f; color: #191919; padding: 6px 12px; box-shadow: 4px 4px 0 var(--ink); }
 .total-distance strong { font-size: 24px; font-weight: 900; letter-spacing: -.05em; }
@@ -238,6 +248,21 @@ select { min-width: 130px; border: 2px solid var(--canvas); border-radius: 0; ba
 .mission-copy ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 28px; margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .mission-finale { font-size: 18px !important; font-weight: 900; }
 footer { display: flex; justify-content: space-between; padding-top: 4px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.athlete-performance { margin-top: 22px; }
+.performance-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
+.performance-summary > div { padding: 14px; background: #f6c85f; color: #191919; }
+.performance-summary strong, .performance-summary span { display: block; }
+.performance-summary strong { font-size: clamp(22px, 4vw, 38px); letter-spacing: -.06em; }
+.performance-summary span { margin-top: 6px; font-size: 10px; font-weight: 900; text-transform: uppercase; }
+.performance-phases { display: grid; gap: 8px; margin-bottom: 18px; }
+.performance-phase { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.performance-phase div, .performance-phase span, .athlete-round-item div { display: grid; gap: 4px; }
+.performance-phase span, .athlete-round-item span, .athlete-round-item small { color: var(--muted); font-size: 11px; }
+.performance-phase b { white-space: nowrap; color: #e7422e; }
+.athlete-round-list { border-top: 2px solid var(--ink); }
+.athlete-round-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.athlete-round-item > div:last-child { text-align: right; }
+.athlete-round-item small { font-weight: 800; }
 @media (max-width: 720px) {
   main { padding: 16px 14px 18px; }
   .topbar { padding-bottom: 18px; }
@@ -266,6 +291,10 @@ footer { display: flex; justify-content: space-between; padding-top: 4px; color:
   .member-login { grid-template-columns: 1fr; }
   .ask-athlete-form { grid-template-columns: 1fr; }
   .athlete-stats { grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }
+  .performance-summary { gap: 6px; }
+  .performance-summary > div { padding: 10px; }
+  .performance-summary strong { font-size: 21px; }
+  .athlete-round-item { align-items: flex-start; }
   .round-row { grid-template-columns: 32px 1fr auto; }
   .round-row span:nth-child(3) { grid-column: 2 / -1; font-size: 10px; }
   .planned-row { grid-template-columns: 52px 28px 32px 1fr auto; }
