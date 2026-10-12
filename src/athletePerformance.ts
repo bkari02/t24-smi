@@ -12,6 +12,7 @@ export type AthletePerformance = {
   rounds: Round[];
   measuredRounds: Round[];
   totalDistanceKm: number;
+  totalSeconds: number;
   measuredSeconds: number;
   phases: PerformancePhase[];
   fastestMeasuredRound?: Round;
@@ -37,14 +38,15 @@ export function buildAthletePerformance(rounds: Round[], athleteId: string): Ath
     const phaseRounds = athleteRounds.filter((round) => round.phase === phase);
     const measuredPhaseRounds = measuredRounds.filter((round) => round.phase === phase);
     const distanceKm = phaseRounds.length * phaseDistances[phase];
+    const measuredDistanceKm = measuredPhaseRounds.length * phaseDistances[phase];
     const measuredSeconds = measuredPhaseRounds.reduce((sum, round) => sum + durationOf(round), 0);
     return {
       phase,
       rounds: phaseRounds.length,
       distanceKm,
       measuredSeconds,
-      averageValue: distanceKm > 0 && measuredSeconds > 0
-        ? phase === 'Bike' ? (distanceKm / measuredSeconds) * 3600 : measuredSeconds / 60 / distanceKm
+      averageValue: measuredDistanceKm > 0 && measuredSeconds > 0
+        ? phase === 'Bike' ? (measuredDistanceKm / measuredSeconds) * 3600 : measuredSeconds / 60 / measuredDistanceKm
         : undefined,
     };
   });
@@ -58,6 +60,7 @@ export function buildAthletePerformance(rounds: Round[], athleteId: string): Ath
     rounds: athleteRounds,
     measuredRounds,
     totalDistanceKm: athleteRounds.reduce((sum, round) => sum + phaseDistances[round.phase], 0),
+    totalSeconds: athleteRounds.reduce((sum, round) => sum + durationOf(round), 0),
     measuredSeconds: measuredRounds.reduce((sum, round) => sum + durationOf(round), 0),
     phases,
     fastestMeasuredRound,
