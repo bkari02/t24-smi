@@ -11,6 +11,7 @@ export type Round = {
   id: string;
   phase: Phase;
   participantId: string;
+  participantIds: string[];
   number: number;
   startedAt: string;
   finishedAt?: string;

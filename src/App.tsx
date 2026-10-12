@@ -295,6 +295,7 @@ function App() {
     const channel = client.channel(`event-state-${eventId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `id=eq.${eventId}` }, refreshSharedState)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter: `event_id=eq.${eventId}` }, refreshSharedState)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'round_participants', filter: `event_id=eq.${eventId}` }, refreshSharedState)
       .subscribe();
     return () => {
       cancelled = true;
@@ -391,12 +392,14 @@ function App() {
   const next = state.members.find((member) => member.id === state.nextParticipantId) ?? state.members[1];
   const athleteId = view === 'athlete' ? selectedAthleteId : active.id;
   const athlete = state.members.find((member) => member.id === athleteId) ?? active;
-  const activeRound = [...state.rounds].reverse().find((round) => round.participantId === active.id && !round.finishedAt);
+  const roundIncludesParticipant = (round: Round, participantId: string) =>
+    round.participantIds.includes(participantId) || round.participantId === participantId;
+  const activeRound = [...state.rounds].reverse().find((round) => roundIncludesParticipant(round, active.id) && !round.finishedAt);
   const completedRounds = state.rounds.filter((round) => round.finishedAt);
   const phaseConfig = phases.find((phase) => phase.name === state.phase)!;
   const totalDistanceKm = completedRounds.reduce((sum, round) => sum + parseFloat(phases.find((item) => item.name === round.phase)?.distance ?? '0'), 0);
   const phaseRounds = completedRounds.filter(
-    (round) => round.phase === state.phase && round.participantId === active.id,
+    (round) => round.phase === state.phase && roundIncludesParticipant(round, active.id),
   );
   const recentDurations = phaseRounds.slice(-3).map((round) =>
     (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000);
@@ -685,14 +688,14 @@ function App() {
               </div>
               <div className="panel schedule"><div className="section-heading"><div><p className="eyebrow">TEAM ROTATION</p><h2>{t('restingOrder')}</h2></div><span className="muted">{t('longestRest')}</span></div>
                 {state.members.filter((member) => member.id !== active.id && member.id !== next.id).sort((a, b) => {
-                  const lastA = [...completedRounds].reverse().find((round) => round.participantId === a.id)?.finishedAt;
-                  const lastB = [...completedRounds].reverse().find((round) => round.participantId === b.id)?.finishedAt;
+                  const lastA = [...completedRounds].reverse().find((round) => roundIncludesParticipant(round, a.id))?.finishedAt;
+                  const lastB = [...completedRounds].reverse().find((round) => roundIncludesParticipant(round, b.id))?.finishedAt;
                   if (!lastA && !lastB) return 0;
                   if (!lastA) return -1;
                   if (!lastB) return 1;
                   return new Date(lastA).getTime() - new Date(lastB).getTime();
                 }).map((member) => {
-                  const lastRound = [...completedRounds].reverse().find((round) => round.participantId === member.id);
+                  const lastRound = [...completedRounds].reverse().find((round) => roundIncludesParticipant(round, member.id));
                   return <button className={`member-row ${focusedParticipantId === member.id ? 'focused' : ''}`} key={member.id} onClick={() => focusParticipant(member.id)}>{member.imageUrl ? <img className="participant-avatar" src={member.imageUrl} alt="" /> : <span className="member-dot" style={{ background: member.color }} />}<strong>{member.name}</strong><span className="member-stat">{lastRound ? `Last ${formatClock(lastRound.finishedAt)}` : t('ready')}</span></button>;
                 })}
               </div>
@@ -700,7 +703,7 @@ function App() {
           </section>
           <section className="panel planned-schedule"><div className="section-heading"><div><p className="eyebrow">{t('plannedRelay')}</p><h2>{t('tuneIn')}</h2></div><span className="muted">{t('liveOverride')}</span></div>{scheduleError && <p className="sync-message">{scheduleError}</p>}{remainingSchedule.length === 0 ? <p className="empty">{t('noSchedule')}</p> : <><div className="planned-list">{visibleSchedule.map((item) => { const member = state.members.find((candidate) => candidate.name.toLowerCase() === item.participant.toLowerCase()); const isCurrent = item.phase === state.phase && item.participant.toLowerCase() === active.name.toLowerCase(); return <div className={`planned-row ${isCurrent ? 'current' : ''}`} key={`${item.phase}-${item.loop}`}><span className="planned-phase">{item.phase}</span><span className="planned-loop">#{item.loop}</span>{member?.imageUrl ? <img className="participant-avatar" src={member.imageUrl} alt="" /> : <span className="member-dot" style={{ background: member?.color ?? '#999' }} />}<strong>{item.participant}</strong><span className="planned-time">{scheduleDate(item.start, language)} · {scheduleClock(item.start, language)}–{scheduleClock(item.end, language)}</span><b>{item.duration}</b></div>; })}</div><div className="schedule-pagination"><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.max(0, page - 1))} disabled={schedulePage === 0}>{t('previous')}</button><span>{t('page')} {schedulePage + 1} / {schedulePageCount}</span><button className="refresh-button" onClick={() => setSchedulePage((page) => Math.min(schedulePageCount - 1, page + 1))} disabled={schedulePage >= schedulePageCount - 1}>{t('next')}</button></div></>}</section>
           <section className="panel history"><div className="section-heading"><div><p className="eyebrow">ROUND LOG</p><h2>{t('latestRounds')}</h2></div></div>{paceError && <p className="sync-message">{paceError}</p>}
-            {completedRounds.length === 0 ? <p className="empty">{t('noRounds')}</p> : <><div className="round-list">{visibleRounds.map((round) => { const member = state.members.find((item) => item.id === round.participantId); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{member?.name}<small className="round-phase">{round.phase} · {phases.find((item) => item.name === round.phase)?.distance}</small></strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>{roundsPageCount > 1 && <div className="schedule-pagination"><button className="refresh-button" onClick={() => setRoundsPage(Math.max(0, currentRoundsPage - 1))} disabled={currentRoundsPage === 0}>{t('previous')}</button><span>{t('page')} {currentRoundsPage + 1} / {roundsPageCount}</span><button className="refresh-button" onClick={() => setRoundsPage(Math.min(roundsPageCount - 1, currentRoundsPage + 1))} disabled={currentRoundsPage >= roundsPageCount - 1}>{t('next')}</button></div>}</>}
+            {completedRounds.length === 0 ? <p className="empty">{t('noRounds')}</p> : <><div className="round-list">{visibleRounds.map((round) => { const roundMembers = (round.participantIds.length > 0 ? round.participantIds : [round.participantId]).map((id) => state.members.find((item) => item.id === id)?.name ?? id); const duration = (new Date(round.finishedAt!).getTime() - new Date(round.startedAt).getTime()) / 1000; return <div className="round-row" key={round.id}><span className="round-number">{round.number}</span><strong>{roundMembers.join(' · ')}<small className="round-phase">{round.phase} · {phases.find((item) => item.name === round.phase)?.distance}</small></strong><span>{formatClock(round.startedAt)} → {formatClock(round.finishedAt)}</span><b>{formatDurationWithSeconds(duration)}</b></div>; })}</div>{roundsPageCount > 1 && <div className="schedule-pagination"><button className="refresh-button" onClick={() => setRoundsPage(Math.max(0, currentRoundsPage - 1))} disabled={currentRoundsPage === 0}>{t('previous')}</button><span>{t('page')} {currentRoundsPage + 1} / {roundsPageCount}</span><button className="refresh-button" onClick={() => setRoundsPage(Math.min(roundsPageCount - 1, currentRoundsPage + 1))} disabled={currentRoundsPage >= roundsPageCount - 1}>{t('next')}</button></div>}</>}
           </section>
           <section className="panel athlete-blackboard"><div className="section-heading"><div><p className="eyebrow">{t('blackboard')}</p><h2>{t('askAthlete')}</h2></div><span className="muted">{publishedQuestions.length}</span></div>{publishedQuestions.length === 0 ? <p className="empty">{t('noQuestions')}</p> : <div className="blackboard-list">{publishedQuestions.map((item) => { const member = state.members.find((candidate) => candidate.id === item.participantId); return <article className="blackboard-entry" key={item.id}><p className="blackboard-meta">{member?.name ?? item.participantId} · {item.askerName}</p><p className="blackboard-question">“{item.question}”</p><p className="blackboard-answer">{item.answer}</p></article>; })}</div>}</section>
           <section className="panel team-introduction">

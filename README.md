@@ -11,6 +11,7 @@ The dashboard tracks the active participant, next handover, round times, phase c
 - Next-participant selection and handover
 - Rolling handover estimate from recent rounds
 - Shared round history through Supabase
+- Shared rounds can link multiple team members to one time and distance entry
 - Cancelled swim course preview from `public/courses/swim.gpx`
 - Leaflet/OpenStreetMap map
 - Supabase location storage and Realtime updates when configured
@@ -102,6 +103,8 @@ The password is a presentation-level access gate, not a security boundary. The f
    - Project anon/public key
 
 The migration enables Row Level Security. Only requests carrying the matching `x-t24-event-token` can read or insert locations for that event.
+
+For a round completed by multiple athletes together, apply [`supabase/migrations/20261012090000_add_round_participants.sql`](./supabase/migrations/20261012090000_add_round_participants.sql), then add one row per athlete to `public.round_participants`. Keep one corresponding row in `public.rounds`; the dashboard counts its distance and duration only once.
 
 ### 3. Deploy the frontend to Netlify
 

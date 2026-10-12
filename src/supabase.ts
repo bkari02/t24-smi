@@ -234,6 +234,7 @@ type EventRow = {
 
 type MemberRow = { participant_id: string; name: string; color: string; sort_order: number };
 type RoundRow = { id: string; phase: Phase; participant_id: string; round_number: number; started_at: string; finished_at: string | null };
+type RoundParticipantRow = { round_id: string; participant_id: string };
 
 function fromEventRow(row: EventRow): SharedEvent {
   return {
@@ -242,28 +243,40 @@ function fromEventRow(row: EventRow): SharedEvent {
   };
 }
 
-function fromRoundRow(row: RoundRow): Round {
+function fromRoundRow(row: RoundRow, participantIds = [row.participant_id]): Round {
   return {
     id: row.id, phase: row.phase, participantId: row.participant_id,
+    participantIds,
     number: row.round_number, startedAt: row.started_at, finishedAt: row.finished_at ?? undefined,
   };
 }
 
 export async function loadSharedState(): Promise<Pick<EventState, 'eventStartedAt' | 'phase' | 'activeParticipantId' | 'nextParticipantId' | 'members' | 'rounds'>> {
   const client = requireSupabase();
-  const [{ data: event, error: eventError }, { data: members, error: memberError }, { data: rounds, error: roundError }] = await Promise.all([
+  const [{ data: event, error: eventError }, { data: members, error: memberError }, { data: rounds, error: roundError }, { data: roundParticipants, error: roundParticipantsError }] = await Promise.all([
     client.from('events').select('id,event_started_at,current_phase,active_participant_id,next_participant_id').eq('id', eventId).single(),
     client.from('team_members').select('participant_id,name,color,sort_order').eq('event_id', eventId).order('sort_order'),
     client.from('rounds').select('id,phase,participant_id,round_number,started_at,finished_at').eq('event_id', eventId).order('round_number'),
+    client.from('round_participants').select('round_id,participant_id').eq('event_id', eventId),
   ]);
   if (eventError) throw eventError;
   if (memberError) throw memberError;
   if (roundError) throw roundError;
+  if (roundParticipantsError) throw roundParticipantsError;
   const sharedEvent = fromEventRow(event as EventRow);
+  const participantIdsByRound = new Map<string, string[]>();
+  (roundParticipants as RoundParticipantRow[]).forEach((row) => {
+    const participantIds = participantIdsByRound.get(row.round_id) ?? [];
+    participantIds.push(row.participant_id);
+    participantIdsByRound.set(row.round_id, participantIds);
+  });
   return {
     ...sharedEvent,
     members: (members as MemberRow[]).map((member) => ({ id: member.participant_id, name: member.name, color: member.color, imageUrl: participantImages[member.participant_id] })),
-    rounds: (rounds as RoundRow[]).map(fromRoundRow),
+    rounds: (rounds as RoundRow[]).map((round) => fromRoundRow(
+      round,
+      [...new Set([round.participant_id, ...(participantIdsByRound.get(round.id) ?? [])])],
+    )),
   };
 }
 
